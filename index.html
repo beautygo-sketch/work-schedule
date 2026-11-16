@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>매장 근무표</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style id="css">
+/* 레이아웃: 위에 달·도구 막대, 아래에 직원×날짜 표 한 장. 색은 휴무/연차·휴가 두 가지만 강조. */
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --ink: #1c1f24; --muted: #6a7079; --line: #cfd3d9;
+  --accent: #1f4f8f; --accent-ink: #ffffff; --red: #d6262b; --ev: #6b3fa0; --sep: #e9ebee;
+  --off: #bfbfbf; --leave: #cbbfe0; --vac: #f3cf7a; --edu: #a9d3ea; --cell-ink: #1c1f24; --today: #fff6d6;
+  --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #15171b; --panel: #1e2126; --ink: #e8eaed; --muted: #9aa1ab; --line: #3a3f47;
+    --accent: #7fb0ee; --accent-ink: #10151c; --red: #ff7a7d; --ev: #c3a1ee; --sep: #2a2e35; --today: #3a3420;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #15171b; --panel: #1e2126; --ink: #e8eaed; --muted: #9aa1ab; --line: #3a3f47;
+  --accent: #7fb0ee; --accent-ink: #10151c; --red: #ff7a7d; --ev: #c3a1ee; --sep: #2a2e35; --today: #3a3420;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.4; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wrap { max-width: 1500px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.month { display: flex; align-items: center; gap: 6px; }
+.month h1 { font-size: 22px; font-weight: 700; margin: 0 6px; min-width: 150px; text-align: center; font-variant-numeric: tabular-nums; }
+.spacer { flex: 1; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 7px 12px; font-weight: 500; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.icon { padding: 7px 11px; }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+.btn.danger { color: var(--red); }
+.btn:disabled { opacity: .45; cursor: default; }
+#status { color: var(--muted); font-size: 12px; }
+
+.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.tools .hint { color: var(--muted); font-size: 12px; }
+.palette { display: flex; flex-wrap: wrap; gap: 6px; }
+.tool { border: 2px solid transparent; border-radius: 6px; padding: 5px 12px; font-weight: 600; color: var(--cell-ink); background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); }
+.tool.k-off { background: var(--off); } .tool.k-leave { background: var(--leave); } .tool.k-vac { background: var(--vac); } .tool.k-edu { background: var(--edu); }
+.tool.k-work { color: var(--ink); }
+.tool[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.colors { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.colors label { display: flex; align-items: center; gap: 4px; }
+.colors input { width: 28px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; }
+
+.gridbox { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+table.grid { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1120px; table-layout: fixed; user-select: none; -webkit-user-select: none; font-variant-numeric: tabular-nums; }
+.grid th, .grid td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: center; padding: 0; height: 32px; font-weight: 500; overflow: hidden; }
+.grid col.c-name { width: 104px; } .grid col.c-sum { width: 44px; }
+.grid .name { position: sticky; left: 0; z-index: 2; background: var(--panel); text-align: left; }
+.grid thead .name { text-align: center; font-weight: 700; font-size: 15px; }
+.grid thead th { background: var(--panel); font-weight: 600; }
+.grid th.red, .grid td.red { color: var(--red); }
+.grid th.today { background: var(--today); }
+.grid th.dbtn { cursor: pointer; }
+.grid th.dbtn:hover { background: var(--sep); }
+.grid tr.notes th { height: auto; min-height: 8px; font-size: 11px; line-height: 1.2; font-weight: 600; padding: 3px 1px; vertical-align: top; word-break: break-all; }
+.grid .n-hol { color: var(--red); display: block; } .grid .n-ev { color: var(--ev); display: block; }
+.grid tr.gsep td { height: 20px; background: var(--sep); text-align: left; font-size: 11px; font-weight: 700; color: var(--muted); padding-left: 8px; position: sticky; left: 0; }
+.grid .name .no { display: inline-block; width: 24px; text-align: center; color: var(--muted); font-size: 12px; }
+.grid .name button { border: 0; background: none; padding: 6px 2px; font-weight: 600; max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.grid .name button:hover { color: var(--accent); text-decoration: underline; }
+.grid td.cell { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--cell-ink); }
+.grid td.cell:hover { box-shadow: inset 0 0 0 2px var(--accent); }
+.grid td.k-off { background: var(--off); } .grid td.k-leave { background: var(--leave); } .grid td.k-vac { background: var(--vac); } .grid td.k-edu { background: var(--edu); }
+.grid td.cell.v-A { font-size: 10.5px; letter-spacing: -0.3px; }
+.grid td.sum { color: var(--muted); font-size: 12px; }
+.grid tfoot th, .grid tfoot td { font-weight: 700; height: 34px; background: var(--panel); }
+.grid tfoot .name { text-align: center; }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 0; width: min(1000px, calc(100vw - 24px)); max-height: calc(100vh - 32px); }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+.dlg-head { display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.dlg-head h2 { margin: 0; font-size: 17px; flex: 1; }
+.dlg-body { padding: 14px 18px 18px; display: flex; flex-direction: column; gap: 14px; }
+.note { color: var(--muted); font-size: 12px; margin: 0; }
+.grp { border: 1px solid var(--line); border-radius: 8px; }
+.grp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; background: var(--sep); border-radius: 8px 8px 0 0; }
+.grp-head input[type=text] { font-weight: 700; width: 120px; }
+.srow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border-top: 1px solid var(--line); }
+.srow input[type=text] { width: 96px; }
+input[type=text], input[type=date], select { border: 1px solid var(--line); border-radius: 5px; padding: 5px 7px; background: var(--panel); }
+.days { display: flex; gap: 3px; }
+.day { width: 28px; height: 28px; border-radius: 5px; border: 1px solid var(--line); background: var(--panel); padding: 0; font-size: 12px; }
+.day[aria-pressed="true"] { background: var(--off); color: var(--cell-ink); border-color: var(--muted); font-weight: 700; }
+.lbl { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.grp-foot { padding: 8px 10px; border-top: 1px solid var(--line); }
+.addform { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.addform input[type=text] { flex: 1; min-width: 140px; }
+.list { display: flex; flex-direction: column; }
+.list .li { display: flex; align-items: center; gap: 10px; padding: 6px 2px; border-top: 1px solid var(--line); }
+.list .li:first-child { border-top: 0; }
+.list .li .dt { width: 108px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.list .li .nm { flex: 1; }
+h3 { font-size: 14px; margin: 0 0 6px; }
+body.ro .tools, body.ro #undo, body.ro #openStaff, body.ro #openEvents, body.ro #pubSnap { display: none; }
+body.ro .grid td.cell, body.ro .grid th.dbtn { cursor: default; }
+body.ro .grid td.cell:hover { box-shadow: none; }
+body.ro .grid th.dbtn:hover { background: var(--panel); }
+body.ro .grid th.dbtn.today:hover { background: var(--today); }
+body.ro .grid .name button { pointer-events: none; }
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: 13px; display: none; z-index: 20; max-width: calc(100vw - 32px); }
+</style>
+</head>
+<body>
+<script id="snap" type="application/json">null</script>
+<script id="core">
+/* ---------- 공통 로직 (화면과 무관) ---------- */
+const CODES = {
+  O: { label: '휴무', kind: 'off' },
+  A: { label: '연/월차', kind: 'leave' },
+  V: { label: '휴가', kind: 'vac' },
+  E: { label: '교육', kind: 'edu' },
+};
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+const pad = (n) => String(n).padStart(2, '0');
+const ymKey = (y, m) => y + '-' + pad(m);
+const dKey = (y, m, d) => y + '-' + pad(m) + '-' + pad(d);
+const daysIn = (y, m) => new Date(y, m, 0).getDate();
+const dowOf = (y, m, d) => new Date(y, m - 1, d).getDay();
+
+/* 음력 기준 명절 (설날, 부처님오신날, 추석 당일) */
+const LUNAR = {
+  2025: { s: '01-29', b: '05-05', c: '10-06' },
+  2026: { s: '02-17', b: '05-24', c: '09-25' },
+  2027: { s: '02-07', b: '05-13', c: '09-15' },
+  2028: { s: '01-27', b: '05-02', c: '10-03' },
+  2029: { s: '02-13', b: '05-20', c: '09-22' },
+  2030: { s: '02-03', b: '05-09', c: '09-12' },
+};
+const EXTRA_HOL = {
+  '2025-01-27': '임시공휴일',
+  '2025-06-03': '대통령선거일',
+  '2026-06-03': '지방선거일',
+  '2028-04-12': '국회의원선거일',
+};
+const HOL_YEARS = Object.keys(LUNAR).map(Number);
+
+const _holCache = {};
+/* 해당 연도 공휴일: { 'MM-DD': ['이름', ...] } */
+function holidaysOf(year) {
+  if (_holCache[year]) return _holCache[year];
+  const map = {};
+  const md = (dt) => pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
+  const at = (s, delta) => {
+    const [m, d] = s.split('-').map(Number);
+    return new Date(year, m - 1, d + (delta || 0));
+  };
+  const add = (dt, name) => {
+    if (dt.getFullYear() !== year) return;
+    (map[md(dt)] = map[md(dt)] || []).push(name);
+  };
+  const singles = [['03-01', '삼일절'], ['05-05', '어린이날'], ['08-15', '광복절'],
+    ['10-03', '개천절'], ['10-09', '한글날'], ['12-25', '성탄절']];
+  if (year >= 2026) singles.push(['05-01', '노동절'], ['07-17', '제헌절']);
+  const L = LUNAR[year];
+  if (L) singles.push([L.b, '부처님오신날']);
+  const blocks = [];
+  if (L) blocks.push([L.s, '설날'], [L.c, '추석']);
+
+  add(at('01-01'), '신정');
+  add(at('06-06'), '현충일');
+  singles.forEach(([s, n]) => add(at(s), n));
+  blocks.forEach(([s, n]) => {
+    add(at(s, -1), n + ' 연휴'); add(at(s), n); add(at(s, 1), n + ' 연휴');
+  });
+  Object.keys(EXTRA_HOL).forEach((k) => {
+    if (k.startsWith(year + '-')) add(at(k.slice(5)), EXTRA_HOL[k]);
+  });
+
+  /* 대체공휴일 */
+  const trig = new Map();
+  blocks.forEach(([s, bn]) => {
+    for (let i = -1; i <= 1; i++) {
+      const dt = at(s, i);
+      if (dt.getFullYear() !== year) continue;
+      const k = md(dt);
+      if ((dt.getDay() === 0 || map[k].length > 1) && !trig.has(k)) trig.set(k, { after: at(s, 1), name: bn });
+    }
+  });
+  singles.forEach(([s, sn]) => {
+    const dt = at(s); const k = md(dt);
+    const wd = dt.getDay();
+    if ((wd === 0 || wd === 6 || map[k].length > 1) && !trig.has(k)) trig.set(k, { after: dt, name: sn });
+  });
+  [...trig.values()].sort((a, b) => a.after - b.after).forEach((tg) => {
+    const dt = new Date(tg.after);
+    do { dt.setDate(dt.getDate() + 1); }
+    while (dt.getDay() === 0 || dt.getDay() === 6 || map[md(dt)]);
+    add(dt, '대체공휴일(' + tg.name + ')');
+  });
+  return (_holCache[year] = map);
+}
+
+/* 한 달의 날짜 정보: [null, {d, dow, red, notes:[{t, type}]}, ...] */
+function dayInfo(state, y, m) {
+  const hol = holidaysOf(y);
+  const hidden = new Set(state.hideHol || []);
+  const out = [null];
+  const n = daysIn(y, m);
+  for (let d = 1; d <= n; d++) {
+    const wd = dowOf(y, m, d);
+    const key = dKey(y, m, d);
+    const notes = [];
+    let red = wd === 0 || wd === 6;
+    const hs = hol[key.slice(5)];
+    if (hs && !hidden.has(key)) { hs.forEach((t) => notes.push({ t, type: 'hol' })); red = true; }
+    (state.events || []).forEach((e) => {
+      if (e.yearly ? e.date.slice(5) === key.slice(5) && e.date.slice(0, 4) <= String(y) : e.date === key) {
+        notes.push({ t: e.name, type: e.red ? 'hol' : 'ev' });
+        if (e.red) red = true;
+      }
+    });
+    out.push({ d, dow: wd, red, notes });
+  }
+  return out;
+}
+
+function fixedDaysAt(st, dateStr) {
+  let days = [];
+  (st.fixed || []).forEach((f) => { if (f.from <= dateStr) days = f.days; });
+  return days;
+}
+function baseVal(st, y, m, d) {
+  return fixedDaysAt(st, dKey(y, m, d)).includes(dowOf(y, m, d)) ? 'O' : '';
+}
+function cellVal(state, st, y, m, d) {
+  const mo = state.ov[ymKey(y, m)];
+  const ov = mo && mo[st.id] && mo[st.id][d];
+  if (ov) return ov === 'W' ? '' : ov;
+  return baseVal(st, y, m, d);
+}
+function setCell(state, st, y, m, d, code) {
+  const k = ymKey(y, m);
+  const base = baseVal(st, y, m, d);
+  const mo = (state.ov[k] = state.ov[k] || {});
+  const row = (mo[st.id] = mo[st.id] || {});
+  if (code === base) delete row[d]; else row[d] = code || 'W';
+  if (!Object.keys(row).length) delete mo[st.id];
+  if (!Object.keys(mo).length) delete state.ov[k];
+}
+function setFixed(st, fromDate, days) {
+  st.fixed = (st.fixed || []).filter((f) => f.from < fromDate);
+  st.fixed.push({ from: fromDate, days: days.slice().sort() });
+}
+function visibleStaff(state, ym) {
+  return state.staff.filter((s) => (!s.start || s.start <= ym) && (!s.end || ym <= s.end));
+}
+function countGroupOf(st) {
+  return st.countAs === 'none' ? null : (st.countAs && st.countAs !== 'auto' ? st.countAs : st.group);
+}
+/* 직급별 근무 인원: { groupId: [_, n1, n2, ...] } */
+function workCounts(state, y, m) {
+  const n = daysIn(y, m);
+  const res = {};
+  state.groups.forEach((g) => { res[g.id] = new Array(n + 1).fill(0); });
+  visibleStaff(state, ymKey(y, m)).forEach((st) => {
+    const g = countGroupOf(st);
+    if (!g || !res[g]) return;
+    for (let d = 1; d <= n; d++) if (!cellVal(state, st, y, m, d)) res[g][d]++;
+  });
+  return res;
+}
+function staffTotals(state, st, y, m) {
+  let off = 0, leave = 0, vac = 0;
+  const n = daysIn(y, m);
+  for (let d = 1; d <= n; d++) {
+    const v = cellVal(state, st, y, m, d);
+    if (v === 'O') off++; else if (v === 'A') leave++; else if (v === 'V') vac++;
+  }
+  return { off, leave, vac };
+}
+
+function seedState() {
+  const all = '2000-01-01';
+  const S = (id, name, group, days, countAs) => ({
+    id, name, group, countAs: countAs || 'auto', fixed: [{ from: all, days }],
+  });
+  return {
+    v: 1, ts: 0,
+    groups: [
+      { id: 'g1', name: '대표', count: false },
+      { id: 'g2', name: '관리자', count: false },
+      { id: 'g3', name: '디자이너', count: true },
+      { id: 'g4', name: '인턴', count: true },
+    ],
+    staff: [
+      S('s1', '매니저', 'g2', [3, 4, 5]), S('s2', '써니', 'g2', [0, 1, 2]),
+      S('s3', '양건', 'g2', [0, 1]), S('s4', '은파', 'g2', [0, 1], 'g3'),
+      S('s5', '최강', 'g3', [2, 3]), S('s6', '소유', 'g3', [1, 2]),
+      S('s7', '나현', 'g3', [0, 4]), S('s8', '일류', 'g3', [3, 4]),
+      S('s9', '선영', 'g3', [5]),
+      S('s10', '염익', 'g4', [0, 1]), S('s11', '가윤', 'g4', [1, 2, 3]),
+      S('s12', '은빈', 'g4', [2, 4, 5]), S('s13', '다희', 'g4', [3, 4]),
+      S('s14', '규석', 'g4', [1, 2]),
+    ],
+    ov: {}, events: [], hideHol: [],
+    colors: { off: '#bfbfbf', leave: '#cbbfe0', vac: '#f3cf7a', edu: '#a9d3ea' },
+    seq: 100,
+  };
+}
+function normalize(s) {
+  const d = seedState();
+  if (!s || typeof s !== 'object') return d;
+  s.groups = Array.isArray(s.groups) ? s.groups : d.groups;
+  s.staff = Array.isArray(s.staff) ? s.staff : [];
+  s.ov = s.ov && typeof s.ov === 'object' ? s.ov : {};
+  s.events = Array.isArray(s.events) ? s.events : [];
+  s.hideHol = Array.isArray(s.hideHol) ? s.hideHol : [];
+  s.colors = Object.assign({}, d.colors, s.colors || {});
+  Object.values(s.ov).forEach((mo) => Object.values(mo || {}).forEach((row) => {
+    Object.keys(row || {}).forEach((d) => { if (row[d] === 'M') row[d] = 'A'; });
+  }));
+  s.seq = s.seq || 100;
+  s.ts = s.ts || 0;
+  return s;
+}
+
+</script>
+<script id="app">
+document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div class=\"top\">\n    <div class=\"month\">\n      <button class=\"btn icon\" id=\"prev\" aria-label=\"이전 달\">‹<\/button>\n      <h1 id=\"title\"><\/h1>\n      <button class=\"btn icon\" id=\"next\" aria-label=\"다음 달\">›<\/button>\n      <button class=\"btn\" id=\"today\">이번 달<\/button>\n    <\/div>\n    <span id=\"status\"><\/span>\n    <span class=\"spacer\"><\/span>\n    <button class=\"btn\" id=\"undo\" disabled>되돌리기<\/button>\n    <button class=\"btn\" id=\"openStaff\">직원 관리<\/button>\n    <button class=\"btn\" id=\"openEvents\">공휴일·기념일<\/button>\n    <button class=\"btn\" id=\"pubSnap\" title=\"로그인하지 않은 사람도 볼 수 있도록 지금 근무표를 공유 페이지에 담습니다\">공유 페이지에 반영<\/button>\n    <button class=\"btn primary\" id=\"saveImg\">JPG로 저장<\/button>\n  <\/div>\n  <div class=\"tools\">\n    <div class=\"palette\" id=\"palette\" role=\"group\" aria-label=\"입력할 종류\"><\/div>\n    <span class=\"hint\">종류를 고르고 칸을 누르거나 드래그하세요. 같은 칸을 다시 누르면 근무로 돌아갑니다.<\/span>\n    <span class=\"spacer\"><\/span>\n    <div class=\"colors\">\n      <label for=\"colOff\">휴무 색 <input type=\"color\" id=\"colOff\"><\/label>\n      <label for=\"colLeave\">연/월차 색 <input type=\"color\" id=\"colLeave\"><\/label>\n      <label for=\"colVac\">휴가 색 <input type=\"color\" id=\"colVac\"><\/label>\n      <label for=\"colEdu\">교육 색 <input type=\"color\" id=\"colEdu\"><\/label>\n    <\/div>\n  <\/div>\n  <div class=\"gridbox\" id=\"grid\"><\/div>\n<\/div>\n\n<dialog id=\"dlgStaff\"><div class=\"dlg-head\"><h2>직원 관리<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\" id=\"staffBody\"><\/div><\/dialog>\n<dialog id=\"dlgEvents\"><div class=\"dlg-head\"><h2>공휴일·기념일<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\" id=\"eventsBody\"><\/div><\/dialog>\n<dialog id=\"dlgImg\"><div class=\"dlg-head\"><h2>근무표 이미지<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\"><p class=\"note\">이미지를 마우스 오른쪽 버튼으로 누르거나(휴대폰은 길게 눌러) \"이미지 저장\"을 선택하세요.<\/p><img id=\"imgOut\" alt=\"\" style=\"max-width:100%;height:auto;border:1px solid var(--line)\"><\/div><\/dialog>\n<div id=\"toast\" role=\"status\"><\/div>\n");
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const LS = 'salon-roster-v1';
+  const now = new Date();
+  let view = { y: now.getFullYear(), m: now.getMonth() + 1 };
+  let tool = 'O';
+  let undoStack = [];
+  let needLogin = false, readOnly = false, docRef = null, downloads = null, saving = false, pending = false, saveTimer = null;
+
+  function loadLocal() { try { const t = localStorage.getItem(LS); return t ? normalize(JSON.parse(t)) : null; } catch (e) { return null; } }
+  const HOSTED = !!(window.claude && typeof window.claude.use === 'function');
+  if (!HOSTED) $('pubSnap').style.display = 'none';
+  let SNAP = null;
+  try { SNAP = JSON.parse($('snap').textContent); } catch (e) {}
+  let state = loadLocal() || (SNAP ? normalize(JSON.parse(JSON.stringify(SNAP))) : seedState());
+  function updatePub() {
+    const b = $('pubSnap'); if (!b) return;
+    const fresh = !!SNAP && SNAP.ts === state.ts;
+    b.disabled = fresh; b.textContent = fresh ? '공유 페이지 최신' : '공유 페이지에 반영';
+  }
+
+  /* ----- 저장 ----- */
+  function setStatus(t) { $('status').textContent = t; }
+  function toast(t) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => { el.style.display = 'none'; }, 3500); }
+  function commit() {
+    if (readOnly) return;
+    state.ts = Date.now();
+    try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {}
+    updatePub();
+    if (!docRef) { setStatus('이 기기에 저장됨'); return; }
+    setStatus('저장 중…');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(pushRemote, 700);
+  }
+  async function pushRemote() {
+    if (!docRef) return;
+    if (saving) { pending = true; return; }
+    saving = true;
+    try {
+      await docRef.set({ json: JSON.stringify(state), ts: state.ts });
+      setStatus('저장됨');
+    } catch (e) {
+      if (e && e.code === 'invalid_argument') { saving = false; pending = false; enterReadOnly(docRef); toast('수정 권한이 없어 보기 전용으로 엽니다.'); return; }
+      setStatus('이 기기에만 저장됨');
+    }
+    saving = false;
+    if (pending) { pending = false; pushRemote(); }
+  }
+  function takeRemote(snap) {
+    if (!snap.exists) return;
+    try { state = normalize(JSON.parse(snap.data().json)); undoStack = []; renderAll(); } catch (e) {}
+  }
+  function enterReadOnly(ref, keepLocal) {
+    readOnly = true; docRef = null; stroke = null;
+    document.body.classList.add('ro');
+    if (!keepLocal) { try { localStorage.removeItem(LS); } catch (e) {} }
+    document.querySelectorAll('dialog[open]').forEach((d) => d.close());
+    setStatus('보기 전용');
+    if (ref) ref.onSnapshot(takeRemote, () => {});
+  }
+  async function initRemote() {
+    if (!(window.claude && typeof window.claude.use === 'function')) { setStatus('이 기기에 저장됨'); return; }
+    setStatus('불러오는 중…');
+    const safe = (p) => Promise.resolve(p).catch(() => null);
+    safe(window.claude.use('downloads')).then((d) => { downloads = d; });
+    const db = await safe(window.claude.use('db'));
+    if (!db) {
+      if (SNAP) { state = normalize(JSON.parse(JSON.stringify(SNAP))); renderAll(); enterReadOnly(null, true); return; }
+      needLogin = true; state = seedState(); state.staff = []; renderAll(); enterReadOnly(null, true); setStatus('로그인 필요'); return;
+    }
+    try {
+      const ref = db.doc('roster/state');
+      const snap = await Promise.race([ref.get(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000))]);
+      const user = await safe(window.claude.use('user'));
+      const canEdit = user ? await safe(user.canEdit()) : null;
+      if (canEdit === false) { takeRemote(snap); if (!snap.exists) { state = seedState(); state.staff = []; renderAll(); } enterReadOnly(ref); return; }
+      docRef = ref;
+      if (snap.exists) {
+        const d = snap.data();
+        if ((d.ts || 0) >= (state.ts || 0)) { state = normalize(JSON.parse(d.json)); undoStack = []; renderAll(); setStatus('저장됨'); }
+        else pushRemote();
+      } else if (state.ts) pushRemote();
+      else setStatus('저장 준비됨');
+    } catch (e) { setStatus('이 기기에 저장됨'); }
+  }
+
+  function pushUndo() { undoStack.push(JSON.stringify(state)); if (undoStack.length > 60) undoStack.shift(); $('undo').disabled = false; }
+  function undo() {
+    if (readOnly || !undoStack.length) return;
+    state = JSON.parse(undoStack.pop());
+    $('undo').disabled = !undoStack.length;
+    commit(); renderAll();
+    if ($('dlgStaff').open) renderStaff();
+    if ($('dlgEvents').open) renderEvents();
+  }
+
+  /* ----- 표 ----- */
+  function applyColors() {
+    document.documentElement.style.setProperty('--off', state.colors.off);
+    document.documentElement.style.setProperty('--leave', state.colors.leave);
+    document.documentElement.style.setProperty('--vac', state.colors.vac);
+    document.documentElement.style.setProperty('--edu', state.colors.edu);
+    $('colOff').value = state.colors.off; $('colLeave').value = state.colors.leave; $('colVac').value = state.colors.vac; $('colEdu').value = state.colors.edu;
+    updatePub();
+  }
+  function renderPalette() {
+    const items = [['O', '휴무', 'off'], ['A', '연/월차', 'leave'], ['V', '휴가', 'vac'], ['E', '교육', 'edu'], ['', '근무(지우기)', 'work']];
+    $('palette').innerHTML = items.map(([c, l, k]) => `<button class="tool k-${k}" data-tool="${c}" aria-pressed="${tool === c}">${l}</button>`).join('');
+  }
+  function renderGrid() {
+    const { y, m } = view; const n = daysIn(y, m); const info = dayInfo(state, y, m);
+    const staff = visibleStaff(state, ymKey(y, m));
+    const isNow = y === now.getFullYear() && m === now.getMonth() + 1;
+    $('title').textContent = `${y}년 ${m}월`;
+    const cls = (d) => (info[d].red ? ' red' : '') + (isNow && d === now.getDate() ? ' today' : '');
+    let h = '<table class="grid"><colgroup><col class="c-name">' + '<col>'.repeat(n) + '<col class="c-sum"><col class="c-sum"><col class="c-sum"></colgroup><thead>';
+    h += '<tr><th class="name" rowspan="3">구분</th>';
+    for (let d = 1; d <= n; d++) h += `<th class="dbtn${cls(d)}" data-date="${d}" title="눌러서 기념일 추가">${d}</th>`;
+    h += '<th rowspan="3" class="sum">휴무</th><th rowspan="3" class="sum">연/<br>월차</th><th rowspan="3" class="sum">휴가</th></tr><tr>';
+    for (let d = 1; d <= n; d++) h += `<th class="${cls(d)}">${WD[info[d].dow]}</th>`;
+    h += '</tr><tr class="notes">';
+    for (let d = 1; d <= n; d++) h += '<th>' + info[d].notes.map((x) => `<span class="n-${x.type}">${esc(x.t)}</span>`).join('') + '</th>';
+    h += '</tr></thead><tbody>';
+    state.groups.forEach((g) => {
+      const list = staff.filter((s) => s.group === g.id);
+      if (!list.length) return;
+      h += `<tr class="gsep"><td colspan="${n + 4}">${esc(g.name)}</td></tr>`;
+      list.forEach((st, i) => {
+        h += `<tr><th class="name"><span class="no">${i + 1}</span><button data-staff="${st.id}" title="직원 정보 수정">${esc(st.name)}</button></th>`;
+        for (let d = 1; d <= n; d++) {
+          const v = cellVal(state, st, y, m, d);
+          h += `<td class="cell${v ? ' k-' + CODES[v].kind + ' v-' + v : ''}" data-s="${st.id}" data-d="${d}">${v ? CODES[v].label : ''}</td>`;
+        }
+        const t = staffTotals(state, st, y, m);
+        h += `<td class="sum">${t.off}</td><td class="sum">${t.leave || ''}</td><td class="sum">${t.vac || ''}</td></tr>`;
+      });
+    });
+    h += '</tbody><tfoot>';
+    const counts = workCounts(state, y, m);
+    state.groups.filter((g) => g.count).forEach((g) => {
+      h += `<tr><th class="name">${esc(g.name)} 근무</th>`;
+      for (let d = 1; d <= n; d++) h += `<td class="${info[d].red ? 'red' : ''}">${counts[g.id][d]}</td>`;
+      h += '<td></td><td></td><td></td></tr>';
+    });
+    h += '</tfoot></table>';
+    if (!staff.length) h += `<div class="empty">${needLogin ? '아직 공유된 근무표가 없습니다.' : '이 달에 표시할 직원이 없습니다. 직원 관리에서 추가하세요.'}</div>`;
+    const box = $('grid'); const sl = box.scrollLeft;
+    box.innerHTML = h; box.scrollLeft = sl;
+  }
+  function renderAll() { applyColors(); renderPalette(); renderGrid(); }
+
+  /* ----- 칸 입력 (누르기·드래그) ----- */
+  let stroke = null, lastPointer = 'mouse';
+  const staffById = (id) => state.staff.find((s) => s.id === id);
+  function paint(td) {
+    const st = staffById(td.dataset.s); const d = +td.dataset.d;
+    if (!st) return;
+    const key = st.id + ':' + d;
+    if (stroke.done.has(key)) return;
+    stroke.done.add(key);
+    setCell(state, st, view.y, view.m, d, stroke.code);
+    renderGrid();
+  }
+  function startStroke(td) {
+    const st = staffById(td.dataset.s); if (!st) return;
+    const cur = cellVal(state, st, view.y, view.m, +td.dataset.d);
+    pushUndo();
+    stroke = { code: cur === tool ? '' : tool, done: new Set() };
+    paint(td);
+  }
+  $('grid').addEventListener('pointerdown', (e) => {
+    lastPointer = e.pointerType;
+    if (readOnly || e.pointerType === 'touch' || e.button !== 0) return;
+    const td = e.target.closest('td.cell'); if (!td) return;
+    e.preventDefault(); startStroke(td);
+  });
+  $('grid').addEventListener('pointerover', (e) => {
+    if (!stroke) return;
+    const td = e.target.closest('td.cell'); if (td) paint(td);
+  });
+  window.addEventListener('pointerup', () => { if (stroke) { stroke = null; commit(); } });
+  $('grid').addEventListener('click', (e) => {
+    if (readOnly) return;
+    const b = e.target.closest('button[data-staff]');
+    if (b) { openStaff(b.dataset.staff); return; }
+    const th = e.target.closest('th[data-date]');
+    if (th) { openEvents(dKey(view.y, view.m, +th.dataset.date)); return; }
+    if (lastPointer !== 'touch') return;
+    const td = e.target.closest('td.cell');
+    if (td) { startStroke(td); stroke = null; commit(); }
+  });
+
+  $('palette').addEventListener('click', (e) => { const b = e.target.closest('[data-tool]'); if (b) { tool = b.dataset.tool; renderPalette(); } });
+  ['colOff', 'colLeave', 'colVac', 'colEdu'].forEach((id) => $(id).addEventListener('change', (e) => {
+    pushUndo(); state.colors[{ colOff: 'off', colLeave: 'leave', colVac: 'vac', colEdu: 'edu' }[id]] = e.target.value; commit(); applyColors();
+  }));
+  const move = (dm) => { let m = view.m + dm, y = view.y; if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; } view = { y, m }; renderGrid(); };
+  $('prev').onclick = () => move(-1); $('next').onclick = () => move(1);
+  $('today').onclick = () => { view = { y: now.getFullYear(), m: now.getMonth() + 1 }; renderGrid(); };
+  $('undo').onclick = undo;
+  document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !/INPUT|SELECT/.test(e.target.tagName)) { e.preventDefault(); undo(); } });
+  document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
+
+  /* ----- 직원 관리 ----- */
+  const newId = (p) => p + (++state.seq);
+  function renderStaff(focusId) {
+    const ym = ymKey(view.y, view.m); const first = dKey(view.y, view.m, 1);
+    const staff = visibleStaff(state, ym);
+    let h = `<p class="note">고정 휴무 요일, 직원 추가·제외는 <b>${view.y}년 ${view.m}월부터</b> 적용되고 이전 달 근무표는 그대로 남습니다. 이름과 직급 변경은 모든 달에 반영됩니다.</p>`;
+    state.groups.forEach((g, gi) => {
+      const list = staff.filter((s) => s.group === g.id);
+      const used = state.staff.some((s) => s.group === g.id);
+      h += `<div class="grp"><div class="grp-head">
+        <input type="text" id="gn-${g.id}" data-gname="${g.id}" value="${esc(g.name)}" aria-label="직급 이름">
+        <label class="lbl" for="gc-${g.id}"><input type="checkbox" id="gc-${g.id}" data-gcount="${g.id}" ${g.count ? 'checked' : ''}> 근무 인원 줄 표시</label>
+        <span class="spacer"></span>
+        <button class="btn small" data-gmove="${g.id}" data-dir="-1" ${gi === 0 ? 'disabled' : ''} aria-label="직급 위로">↑</button>
+        <button class="btn small" data-gmove="${g.id}" data-dir="1" ${gi === state.groups.length - 1 ? 'disabled' : ''} aria-label="직급 아래로">↓</button>
+        <button class="btn small danger" data-gdel="${g.id}" ${used ? 'disabled title="직원이 있었던 직급은 지울 수 없습니다"' : ''}>직급 삭제</button></div>`;
+      list.forEach((st, i) => {
+        const days = fixedDaysAt(st, first);
+        h += `<div class="srow">
+          <button class="btn small" data-smove="${st.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="위로">↑</button>
+          <button class="btn small" data-smove="${st.id}" data-dir="1" ${i === list.length - 1 ? 'disabled' : ''} aria-label="아래로">↓</button>
+          <input type="text" id="sn-${st.id}" data-sname="${st.id}" value="${esc(st.name)}" aria-label="이름">
+          <span class="lbl">고정 휴무</span><span class="days">` +
+          WD.map((w, wd) => `<button class="day" data-sday="${st.id}" data-wd="${wd}" aria-pressed="${days.includes(wd)}">${w}</button>`).join('') + `</span>
+          <label class="lbl" for="sg-${st.id}">직급 <select id="sg-${st.id}" data-sgroup="${st.id}">` +
+          state.groups.map((x) => `<option value="${x.id}" ${x.id === st.group ? 'selected' : ''}>${esc(x.name)}</option>`).join('') + `</select></label>
+          <label class="lbl" for="sc-${st.id}">인원 집계 <select id="sc-${st.id}" data-scount="${st.id}">
+            <option value="auto" ${(!st.countAs || st.countAs === 'auto') ? 'selected' : ''}>소속 직급</option>` +
+          state.groups.filter((x) => x.id !== st.group).map((x) => `<option value="${x.id}" ${x.id === st.countAs ? 'selected' : ''}>${esc(x.name)}</option>`).join('') +
+          `<option value="none" ${st.countAs === 'none' ? 'selected' : ''}>집계 안 함</option></select></label>
+          <span class="spacer"></span>
+          <button class="btn small danger" data-sdel="${st.id}">${view.m}월부터 제외</button></div>`;
+      });
+      h += `<div class="grp-foot"><button class="btn small" data-sadd="${g.id}">+ ${esc(g.name)} 직원 추가</button></div></div>`;
+    });
+    h += '<div><button class="btn" id="gadd">+ 직급 추가</button></div>';
+    $('staffBody').innerHTML = h;
+    if (focusId) { const el = $('sn-' + focusId); if (el) { el.focus(); el.select(); } }
+  }
+  function openStaff(focusId) { renderStaff(focusId); if (!$('dlgStaff').open) $('dlgStaff').showModal(); if (focusId) { const el = $('sn-' + focusId); if (el) { el.focus(); el.select(); } } }
+  $('openStaff').onclick = () => openStaff();
+  const prevYm = () => (view.m === 1 ? ymKey(view.y - 1, 12) : ymKey(view.y, view.m - 1));
+  $('staffBody').addEventListener('click', (e) => {
+    const t = e.target.closest('button'); if (!t) return;
+    const d = t.dataset; const ym = ymKey(view.y, view.m);
+    let focus = null;
+    if (d.sday) {
+      const st = staffById(d.sday); const first = dKey(view.y, view.m, 1);
+      const days = fixedDaysAt(st, first).slice(); const wd = +d.wd;
+      const i = days.indexOf(wd); if (i >= 0) days.splice(i, 1); else days.push(wd);
+      pushUndo(); setFixed(st, first, days);
+    } else if (d.sadd) {
+      pushUndo();
+      const st = { id: newId('s'), name: '새 직원', group: d.sadd, countAs: 'auto', fixed: [], start: ym };
+      state.staff.push(st); focus = st.id;
+    } else if (d.sdel) {
+      const st = staffById(d.sdel); pushUndo();
+      if (st.start && st.start >= ym) {
+        state.staff = state.staff.filter((s) => s !== st);
+        Object.keys(state.ov).forEach((k) => { delete state.ov[k][st.id]; });
+      } else st.end = prevYm();
+      toast(`${st.name} 님을 ${view.m}월부터 제외했습니다. 되돌리기로 취소할 수 있습니다.`);
+    } else if (d.smove) {
+      const st = staffById(d.smove);
+      const list = visibleStaff(state, ym).filter((s) => s.group === st.group);
+      const other = list[list.indexOf(st) + (+d.dir)]; if (!other) return;
+      pushUndo();
+      const a = state.staff.indexOf(st), b = state.staff.indexOf(other);
+      state.staff[a] = other; state.staff[b] = st;
+    } else if (d.gmove) {
+      const i = state.groups.findIndex((g) => g.id === d.gmove); const j = i + (+d.dir);
+      if (j < 0 || j >= state.groups.length) return;
+      pushUndo(); const g = state.groups[i]; state.groups[i] = state.groups[j]; state.groups[j] = g;
+    } else if (d.gdel) {
+      pushUndo(); state.groups = state.groups.filter((g) => g.id !== d.gdel);
+    } else if (t.id === 'gadd') {
+      pushUndo(); state.groups.push({ id: newId('g'), name: '새 직급', count: false });
+    } else return;
+    commit(); renderGrid(); renderStaff(focus);
+  });
+  $('staffBody').addEventListener('change', (e) => {
+    const d = e.target.dataset;
+    if (d.sname) { pushUndo(); staffById(d.sname).name = e.target.value.trim() || '이름 없음'; }
+    else if (d.sgroup) { pushUndo(); const st = staffById(d.sgroup); st.group = e.target.value; if (st.countAs === st.group) st.countAs = 'auto'; }
+    else if (d.scount) { pushUndo(); staffById(d.scount).countAs = e.target.value; }
+    else if (d.gname) { pushUndo(); state.groups.find((g) => g.id === d.gname).name = e.target.value.trim() || '직급'; }
+    else if (d.gcount) { pushUndo(); state.groups.find((g) => g.id === d.gcount).count = e.target.checked; }
+    else return;
+    commit(); renderGrid();
+    if (!d.sname) renderStaff();
+  });
+
+  /* ----- 공휴일·기념일 ----- */
+  let evDate = null;
+  function renderEvents() {
+    const y = view.y; const hol = holidaysOf(y); const hidden = new Set(state.hideHol);
+    const evs = state.events.slice().sort((a, b) => (a.date.slice(5) < b.date.slice(5) ? -1 : 1));
+    let h = `<div><h3>기념일·매장 일정 추가</h3><form class="addform" id="evForm">
+      <input type="date" id="evDate" value="${evDate || dKey(view.y, view.m, 1)}" required aria-label="날짜">
+      <input type="text" id="evName" placeholder="예: 매장 오픈 기념일" maxlength="20" required aria-label="이름">
+      <label class="lbl" for="evYearly"><input type="checkbox" id="evYearly" checked> 매년 반복</label>
+      <label class="lbl" for="evRed"><input type="checkbox" id="evRed"> 빨간 날로 표시</label>
+      <button class="btn primary" type="submit">추가</button></form></div>`;
+    h += '<div><h3>추가한 기념일</h3><div class="list">' + (evs.length ? evs.map((e) =>
+      `<div class="li"><span class="dt">${e.yearly ? '매년 ' + e.date.slice(5).replace('-', '/') : e.date}</span><span class="nm" style="color:var(${e.red ? '--red' : '--ev'})">${esc(e.name)}</span><button class="btn small danger" data-evdel="${e.id}">삭제</button></div>`).join('')
+      : '<p class="note">아직 없습니다. 달력의 날짜 숫자를 눌러도 추가할 수 있습니다.</p>') + '</div></div>';
+    h += `<div><h3>${y}년 공휴일</h3>` + (HOL_YEARS.includes(y) ? '' : '<p class="note">이 연도는 설날·추석·부처님오신날 날짜가 들어 있지 않습니다. 위에서 직접 추가하세요.</p>') +
+      '<p class="note">매장에서 쓰지 않는 날은 체크를 끄면 달력에서 빠집니다.</p><div class="list">' +
+      Object.keys(hol).sort().map((k) => { const key = y + '-' + k; return `<div class="li"><span class="dt">${k.replace('-', '/')} (${WD[new Date(y, +k.slice(0, 2) - 1, +k.slice(3)).getDay()]})</span><label class="nm" for="h-${key}">${esc(hol[k].join(' · '))}</label><input type="checkbox" id="h-${key}" data-hol="${key}" ${hidden.has(key) ? '' : 'checked'} aria-label="표시"></div>`; }).join('') + '</div></div>';
+    $('eventsBody').innerHTML = h;
+  }
+  function openEvents(date) { evDate = date || null; renderEvents(); if (!$('dlgEvents').open) $('dlgEvents').showModal(); if (date) $('evName').focus(); }
+  $('openEvents').onclick = () => openEvents();
+  $('eventsBody').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const date = $('evDate').value, name = $('evName').value.trim();
+    if (!date || !name) return;
+    pushUndo();
+    state.events.push({ id: newId('e'), date, name, yearly: $('evYearly').checked, red: $('evRed').checked });
+    evDate = date; commit(); renderGrid(); renderEvents();
+  });
+  $('eventsBody').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-evdel]'); if (!b) return;
+    pushUndo(); state.events = state.events.filter((x) => x.id !== b.dataset.evdel); commit(); renderGrid(); renderEvents();
+  });
+  $('eventsBody').addEventListener('change', (e) => {
+    const k = e.target.dataset.hol; if (!k) return;
+    pushUndo();
+    state.hideHol = state.hideHol.filter((x) => x !== k);
+    if (!e.target.checked) state.hideHol.push(k);
+    commit(); renderGrid();
+  });
+
+  /* ----- JPG 저장 ----- */
+  async function drawImage() {
+    const { y, m } = view; const n = daysIn(y, m); const info = dayInfo(state, y, m);
+    const staff = visibleStaff(state, ymKey(y, m)); const counts = workCounts(state, y, m);
+    const FF = '"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+    try { await Promise.all([document.fonts.load('500 14px ' + FF, '가'), document.fonts.load('700 14px ' + FF, '가')]); } catch (e) {}
+    const P = 24, W_NO = 34, W_NAME = 92, W_D = 44, W_S = 50;
+    const H_T = 60, H_H = 30, H_SEP = 22, H_R = 34, H_C = 36, H_L = 44;
+    const C = { ink: '#1c1f24', red: '#d6262b', ev: '#6b3fa0', line: '#8a8f98', sep: '#e9ebee', muted: '#5f656e' };
+    const cv = document.createElement('canvas'); const g = cv.getContext('2d');
+    const font = (w, s) => { g.font = `${w} ${s}px ${FF}`; };
+    const wrap = (t, w) => { const out = []; let cur = ''; for (const ch of t) { if (cur && g.measureText(cur + ch).width > w) { out.push(cur); cur = ch; } else cur += ch; } if (cur) out.push(cur); return out; };
+    font(600, 11);
+    const noteLines = info.map((x) => (x ? x.notes.flatMap((nt) => wrap(nt.t, W_D - 6).map((t) => ({ t, type: nt.type }))) : []));
+    const maxL = Math.max(0, ...noteLines.map((l) => l.length));
+    const H_N = maxL ? maxL * 13 + 8 : 0;
+    const groups = state.groups.map((gr) => ({ gr, list: staff.filter((s) => s.group === gr.id) })).filter((x) => x.list.length);
+    const cg = state.groups.filter((gr) => gr.count);
+    const tableW = W_NO + W_NAME + n * W_D + 3 * W_S;
+    const tableH = H_T + 2 * H_H + H_N + groups.reduce((a, x) => a + H_SEP + x.list.length * H_R, 0) + (cg.length ? H_SEP + cg.length * H_C : 0);
+    const S = 2;
+    cv.width = (tableW + 2 * P) * S; cv.height = (tableH + 2 * P + H_L) * S;
+    g.scale(S, S);
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, cv.width, cv.height);
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 1; g.strokeStyle = C.line;
+    const box = (x, yy, w, hh, fill) => { if (fill) { g.fillStyle = fill; g.fillRect(x, yy, w, hh); } g.strokeRect(x + 0.5, yy + 0.5, w, hh); };
+    const text = (t, x, yy, w, hh, color) => { g.fillStyle = color || C.ink; g.fillText(String(t), x + w / 2, yy + hh / 2 + 1); };
+    const X0 = P, XD = P + W_NO + W_NAME, XS = XD + n * W_D;
+    const dx = (d) => XD + (d - 1) * W_D;
+    let yy = P;
+    const headH = H_T + 2 * H_H + H_N;
+    box(X0, yy, W_NO + W_NAME, headH); font(700, 17); text('구분', X0, yy, W_NO + W_NAME, headH);
+    box(XD, yy, n * W_D + 3 * W_S, H_T); font(700, 26); text(`${y}년 ${m}월 근무표`, XD, yy, n * W_D + 3 * W_S, H_T);
+    yy += H_T;
+    const subH = 2 * H_H + H_N;
+    font(600, 13);
+    box(XS, yy, W_S, subH); text('휴무', XS, yy, W_S, subH);
+    box(XS + W_S, yy, W_S, subH); text('연/', XS + W_S, yy - 9, W_S, subH); text('월차', XS + W_S, yy + 9, W_S, subH);
+    box(XS + 2 * W_S, yy, W_S, subH); text('휴가', XS + 2 * W_S, yy, W_S, subH);
+    for (let d = 1; d <= n; d++) {
+      const col = info[d].red ? C.red : C.ink;
+      font(700, 14);
+      box(dx(d), yy, W_D, H_H); text(d, dx(d), yy, W_D, H_H, col);
+      box(dx(d), yy + H_H, W_D, H_H); text(WD[info[d].dow], dx(d), yy + H_H, W_D, H_H, col);
+      if (H_N) {
+        box(dx(d), yy + 2 * H_H, W_D, H_N); font(600, 11);
+        noteLines[d].forEach((ln, i) => text(ln.t, dx(d), yy + 2 * H_H + 4 + i * 13, W_D, 13, ln.type === 'hol' ? C.red : C.ev));
+      }
+    }
+    yy += subH;
+    const sepRow = (label) => { box(X0, yy, tableW, H_SEP, C.sep); font(700, 11); g.textAlign = 'left'; g.fillStyle = C.muted; g.fillText(label, X0 + 8, yy + H_SEP / 2 + 1); g.textAlign = 'center'; yy += H_SEP; };
+    groups.forEach(({ gr, list }) => {
+      sepRow(gr.name);
+      list.forEach((st, i) => {
+        box(X0, yy, W_NO, H_R); font(500, 12); text(i + 1, X0, yy, W_NO, H_R, C.muted);
+        box(X0 + W_NO, yy, W_NAME, H_R); font(700, 14);
+        let nm = st.name; while (nm.length > 1 && g.measureText(nm).width > W_NAME - 8) nm = nm.slice(0, -1);
+        text(nm, X0 + W_NO, yy, W_NAME, H_R);
+        for (let d = 1; d <= n; d++) {
+          const v = cellVal(state, st, y, m, d);
+          box(dx(d), yy, W_D, H_R, v ? state.colors[CODES[v].kind] : null);
+          if (v) { font(700, v === 'A' ? 11 : 13); text(CODES[v].label, dx(d), yy, W_D, H_R); }
+        }
+        const t = staffTotals(state, st, y, m); font(500, 13);
+        box(XS, yy, W_S, H_R); text(t.off, XS, yy, W_S, H_R, C.muted);
+        box(XS + W_S, yy, W_S, H_R); if (t.leave) text(t.leave, XS + W_S, yy, W_S, H_R, C.muted);
+        box(XS + 2 * W_S, yy, W_S, H_R); if (t.vac) text(t.vac, XS + 2 * W_S, yy, W_S, H_R, C.muted);
+        yy += H_R;
+      });
+    });
+    if (cg.length) {
+      sepRow('근무 인원');
+      cg.forEach((gr) => {
+        box(X0, yy, W_NO + W_NAME, H_C); font(700, 14); text(gr.name, X0, yy, W_NO + W_NAME, H_C);
+        for (let d = 1; d <= n; d++) { box(dx(d), yy, W_D, H_C); text(counts[gr.id][d], dx(d), yy, W_D, H_C, info[d].red ? C.red : C.ink); }
+        box(XS, yy, W_S, H_C); box(XS + W_S, yy, W_S, H_C); box(XS + 2 * W_S, yy, W_S, H_C);
+        yy += H_C;
+      });
+    }
+    yy += 14; font(500, 13); g.textAlign = 'left';
+    box(X0, yy, 30, 20, state.colors.off); g.fillStyle = C.ink; g.fillText('휴무', X0 + 38, yy + 11);
+    box(X0 + 90, yy, 30, 20, state.colors.leave); g.fillStyle = C.ink; g.fillText('연/월차', X0 + 128, yy + 11);
+    box(X0 + 200, yy, 30, 20, state.colors.vac); g.fillStyle = C.ink; g.fillText('휴가', X0 + 238, yy + 11);
+    box(X0 + 290, yy, 30, 20, state.colors.edu); g.fillStyle = C.ink; g.fillText('교육', X0 + 328, yy + 11);
+    return new Promise((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('blob'))), 'image/jpeg', 0.93));
+  }
+  $('saveImg').onclick = async () => {
+    const filename = `${view.y}년 ${view.m}월 근무표.jpg`;
+    let blob;
+    try { blob = await drawImage(); } catch (e) { toast('이미지를 만들지 못했습니다.'); return; }
+    if (downloads) {
+      try { await downloads.save({ filename, data: blob }); toast(`${filename} 저장을 요청했습니다.`); return; }
+      catch (e) { if (e && e.code === 'declined') return; }
+    }
+    if (!HOSTED) {
+      try {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        toast(`${filename} 파일로 저장했습니다.`); return;
+      } catch (e) {}
+    }
+    if (imgUrl) URL.revokeObjectURL(imgUrl);
+    imgUrl = URL.createObjectURL(blob);
+    $('imgOut').src = imgUrl; $('imgOut').alt = filename.replace('.jpg', '');
+    if (!$('dlgImg').open) $('dlgImg').showModal();
+  };
+  let imgUrl = null;
+
+  /* ----- 공유 페이지에 반영 (근무표를 페이지 자체에 담아 다시 게시) ----- */
+  $('pubSnap').onclick = async () => {
+    const art = window.claude && typeof window.claude.use === 'function' ? await Promise.resolve(window.claude.use('artifact')).catch(() => null) : null;
+    if (!art) { toast('이 화면에서는 공유 페이지에 반영할 수 없습니다.'); return; }
+    if (!state.ts) state.ts = Date.now();
+    const json = JSON.stringify(state).replace(/</g, '\\u003c');
+    const S = 'script';
+    const html = '<!DOCTYPE html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>매장 근무표</title>\n' +
+      '<link rel="preconnect" href="https://fonts.googleapis.com">\n<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">\n' +
+      '<style id="css">' + $('css').textContent + '</style>\n</head>\n<body>\n' +
+      '<' + S + ' id="snap" type="application/json">' + json + '</' + S + '>\n' +
+      '<' + S + ' id="core">' + $('core').textContent + '</' + S + '>\n' +
+      '<' + S + ' id="app">' + $('app').textContent + '</' + S + '>\n</body>\n</html>\n';
+    try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {}
+    if (docRef) { clearTimeout(saveTimer); await pushRemote(); }
+    $('pubSnap').disabled = true; setStatus('공유 페이지에 반영 중…');
+    try { await art.publish(html); }
+    catch (e) {
+      updatePub(); setStatus('');
+      const code = e && e.code;
+      if (code === 'conflict') return;
+      toast(code === 'not_writer' || code === 'not_granted' ? '이 계정에는 반영 권한이 없습니다.' : '반영하지 못했습니다. 공개 공유를 잠시 끄고 다시 눌러 보세요.');
+    }
+  };
+
+  renderAll();
+  initRemote();
+})();
+</script>
+</body>
+</html>
