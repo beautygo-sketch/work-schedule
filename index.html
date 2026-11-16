@@ -19,7 +19,7 @@
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --ink: #1c1f24; --muted: #6a7079; --line: #cfd3d9;
   --accent: #1f4f8f; --accent-ink: #ffffff; --red: #d6262b; --ev: #6b3fa0; --sep: #e9ebee;
-  --off: #bfbfbf; --leave: #cbbfe0; --vac: #f3cf7a; --edu: #a9d3ea; --cell-ink: #1c1f24; --today: #fff6d6;
+  --off: #bfbfbf; --cell-ink: #1c1f24; --today: #fff6d6;
   --font: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 @media (prefers-color-scheme: dark) {
@@ -59,7 +59,6 @@ button { cursor: pointer; }
 .tools .hint { color: var(--muted); font-size: 12px; }
 .palette { display: flex; flex-wrap: wrap; gap: 6px; }
 .tool { border: 2px solid transparent; border-radius: 6px; padding: 5px 12px; font-weight: 600; color: var(--cell-ink); background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); }
-.tool.k-off { background: var(--off); } .tool.k-leave { background: var(--leave); } .tool.k-vac { background: var(--vac); } .tool.k-edu { background: var(--edu); }
 .tool.k-work { color: var(--ink); }
 .tool[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .colors { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
@@ -85,8 +84,15 @@ table.grid { border-collapse: separate; border-spacing: 0; width: 100%; min-widt
 .grid .name button:hover { color: var(--accent); text-decoration: underline; }
 .grid td.cell { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--cell-ink); }
 .grid td.cell:hover { box-shadow: inset 0 0 0 2px var(--accent); }
-.grid td.k-off { background: var(--off); } .grid td.k-leave { background: var(--leave); } .grid td.k-vac { background: var(--vac); } .grid td.k-edu { background: var(--edu); }
-.grid td.cell.v-A { font-size: 10.5px; letter-spacing: -0.3px; }
+.grid td.cell.s3 { font-size: 11px; letter-spacing: -0.3px; }
+.grid td.cell.s4 { font-size: 10px; letter-spacing: -0.5px; }
+.grid .wk { border-left: 2px solid var(--ink); }
+.grid th.sum { font-size: 11px; line-height: 1.15; word-break: keep-all; padding: 0 2px; }
+.trow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 2px; border-top: 1px solid var(--line); }
+.trow:first-child { border-top: 0; }
+.trow input[type=text] { width: 120px; font-weight: 600; }
+.trow input[type=color] { width: 44px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: none; }
+.trow .chip { min-width: 64px; text-align: center; border-radius: 6px; padding: 5px 10px; font-weight: 600; font-size: 12px; }
 .grid td.sum { color: var(--muted); font-size: 12px; }
 .grid tfoot th, .grid tfoot td { font-weight: 700; height: 34px; background: var(--panel); }
 .grid tfoot .name { text-align: center; }
@@ -130,12 +136,23 @@ body.ro .grid .name button { pointer-events: none; }
 <script id="snap" type="application/json">null</script>
 <script id="core">
 /* ---------- 공통 로직 (화면과 무관) ---------- */
-const CODES = {
-  O: { label: '휴무', kind: 'off' },
-  A: { label: '연/월차', kind: 'leave' },
-  V: { label: '휴가', kind: 'vac' },
-  E: { label: '교육', kind: 'edu' },
-};
+/* 입력 종류(휴무·연차·교육 등). 'O'(휴무)는 고정 휴무에 쓰여 지울 수 없다. */
+const DEFAULT_TYPES = [
+  { id: 'O', label: '휴무', color: '#bfbfbf', sum: true },
+  { id: 'A', label: '연/월차', color: '#cbbfe0', sum: true },
+  { id: 'V', label: '휴가', color: '#f3cf7a', sum: true },
+  { id: 'N', label: '앙포레', color: '#f5b8c9', sum: false },
+  { id: 'B', label: '밀본', color: '#b7ddb0', sum: false },
+  { id: 'E', label: '교육', color: '#a9d3ea', sum: false },
+];
+function typeOf(state, code) {
+  return code ? (state.types.find((t) => t.id === code) || null) : null;
+}
+function inkFor(hex) {
+  const h = String(hex || '#cccccc').replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 140 ? '#1c1f24' : '#ffffff';
+}
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
 const pad = (n) => String(n).padStart(2, '0');
 const ymKey = (y, m) => y + '-' + pad(m);
@@ -251,7 +268,8 @@ function baseVal(st, y, m, d) {
 function cellVal(state, st, y, m, d) {
   const mo = state.ov[ymKey(y, m)];
   const ov = mo && mo[st.id] && mo[st.id][d];
-  if (ov) return ov === 'W' ? '' : ov;
+  if (ov === 'W') return '';
+  if (ov && typeOf(state, ov)) return ov;
   return baseVal(st, y, m, d);
 }
 function setCell(state, st, y, m, d, code) {
@@ -286,13 +304,13 @@ function workCounts(state, y, m) {
   return res;
 }
 function staffTotals(state, st, y, m) {
-  let off = 0, leave = 0, vac = 0;
+  const t = {};
   const n = daysIn(y, m);
   for (let d = 1; d <= n; d++) {
     const v = cellVal(state, st, y, m, d);
-    if (v === 'O') off++; else if (v === 'A') leave++; else if (v === 'V') vac++;
+    if (v) t[v] = (t[v] || 0) + 1;
   }
-  return { off, leave, vac };
+  return t;
 }
 
 function seedState() {
@@ -319,7 +337,7 @@ function seedState() {
       S('s14', '규석', 'g4', [1, 2]),
     ],
     ov: {}, events: [], hideHol: [],
-    colors: { off: '#bfbfbf', leave: '#cbbfe0', vac: '#f3cf7a', edu: '#a9d3ea' },
+    types: DEFAULT_TYPES.map((t) => Object.assign({}, t)),
     seq: 100,
   };
 }
@@ -331,7 +349,13 @@ function normalize(s) {
   s.ov = s.ov && typeof s.ov === 'object' ? s.ov : {};
   s.events = Array.isArray(s.events) ? s.events : [];
   s.hideHol = Array.isArray(s.hideHol) ? s.hideHol : [];
-  s.colors = Object.assign({}, d.colors, s.colors || {});
+  if (!Array.isArray(s.types) || !s.types.length) {
+    const c = s.colors || {};
+    const old = { O: c.off, A: c.leave, V: c.vac, E: c.edu };
+    s.types = DEFAULT_TYPES.map((t) => Object.assign({}, t, old[t.id] ? { color: old[t.id] } : {}));
+  }
+  if (!s.types.some((t) => t.id === 'O')) s.types.unshift(Object.assign({}, DEFAULT_TYPES[0]));
+  delete s.colors;
   Object.values(s.ov).forEach((mo) => Object.values(mo || {}).forEach((row) => {
     Object.keys(row || {}).forEach((d) => { if (row[d] === 'M') row[d] = 'A'; });
   }));
@@ -342,7 +366,7 @@ function normalize(s) {
 
 </script>
 <script id="app">
-document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div class=\"top\">\n    <div class=\"month\">\n      <button class=\"btn icon\" id=\"prev\" aria-label=\"이전 달\">‹<\/button>\n      <h1 id=\"title\"><\/h1>\n      <button class=\"btn icon\" id=\"next\" aria-label=\"다음 달\">›<\/button>\n      <button class=\"btn\" id=\"today\">이번 달<\/button>\n    <\/div>\n    <span id=\"status\"><\/span>\n    <span class=\"spacer\"><\/span>\n    <button class=\"btn\" id=\"undo\" disabled>되돌리기<\/button>\n    <button class=\"btn\" id=\"openStaff\">직원 관리<\/button>\n    <button class=\"btn\" id=\"openEvents\">공휴일·기념일<\/button>\n    <button class=\"btn\" id=\"pubSnap\" title=\"로그인하지 않은 사람도 볼 수 있도록 지금 근무표를 공유 페이지에 담습니다\">공유 페이지에 반영<\/button>\n    <button class=\"btn primary\" id=\"saveImg\">JPG로 저장<\/button>\n  <\/div>\n  <div class=\"tools\">\n    <div class=\"palette\" id=\"palette\" role=\"group\" aria-label=\"입력할 종류\"><\/div>\n    <span class=\"hint\">종류를 고르고 칸을 누르거나 드래그하세요. 같은 칸을 다시 누르면 근무로 돌아갑니다.<\/span>\n    <span class=\"spacer\"><\/span>\n    <div class=\"colors\">\n      <label for=\"colOff\">휴무 색 <input type=\"color\" id=\"colOff\"><\/label>\n      <label for=\"colLeave\">연/월차 색 <input type=\"color\" id=\"colLeave\"><\/label>\n      <label for=\"colVac\">휴가 색 <input type=\"color\" id=\"colVac\"><\/label>\n      <label for=\"colEdu\">교육 색 <input type=\"color\" id=\"colEdu\"><\/label>\n    <\/div>\n  <\/div>\n  <div class=\"gridbox\" id=\"grid\"><\/div>\n<\/div>\n\n<dialog id=\"dlgStaff\"><div class=\"dlg-head\"><h2>직원 관리<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\" id=\"staffBody\"><\/div><\/dialog>\n<dialog id=\"dlgEvents\"><div class=\"dlg-head\"><h2>공휴일·기념일<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\" id=\"eventsBody\"><\/div><\/dialog>\n<dialog id=\"dlgImg\"><div class=\"dlg-head\"><h2>근무표 이미지<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\"><p class=\"note\">이미지를 마우스 오른쪽 버튼으로 누르거나(휴대폰은 길게 눌러) \"이미지 저장\"을 선택하세요.<\/p><img id=\"imgOut\" alt=\"\" style=\"max-width:100%;height:auto;border:1px solid var(--line)\"><\/div><\/dialog>\n<div id=\"toast\" role=\"status\"><\/div>\n");
+document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div class=\"top\">\n    <div class=\"month\">\n      <button class=\"btn icon\" id=\"prev\" aria-label=\"이전 달\">‹<\/button>\n      <h1 id=\"title\"><\/h1>\n      <button class=\"btn icon\" id=\"next\" aria-label=\"다음 달\">›<\/button>\n      <button class=\"btn\" id=\"today\">이번 달<\/button>\n    <\/div>\n    <span id=\"status\"><\/span>\n    <span class=\"spacer\"><\/span>\n    <button class=\"btn\" id=\"undo\" disabled>되돌리기<\/button>\n    <button class=\"btn\" id=\"openStaff\">직원 관리<\/button>\n    <button class=\"btn\" id=\"openEvents\">공휴일·기념일<\/button>\n    <button class=\"btn\" id=\"pubSnap\" title=\"로그인하지 않은 사람도 볼 수 있도록 지금 근무표를 공유 페이지에 담습니다\">공유 페이지에 반영<\/button>\n    <button class=\"btn primary\" id=\"saveImg\">JPG로 저장<\/button>\n    <button class=\"btn primary\" id=\"savePdf\">PDF로 저장<\/button>\n  <\/div>\n  <div class=\"tools\">\n    <div class=\"palette\" id=\"palette\" role=\"group\" aria-label=\"입력할 종류\"><\/div>\n    <span class=\"hint\">종류를 고르고 칸을 누르거나 드래그하세요. 같은 칸을 다시 누르면 근무로 돌아갑니다.<\/span>\n    <span class=\"spacer\"><\/span>\n    <button class=\"btn small\" id=\"openTypes\">종류·색 편집<\/button>\n  <\/div>\n  <div class=\"gridbox\" id=\"grid\"><\/div>\n<\/div>\n\n<dialog id=\"dlgTypes\"><div class=\"dlg-head\"><h2>종류·색 편집<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\" id=\"typesBody\"><\/div><\/dialog>\n<dialog id=\"dlgStaff\"><div class=\"dlg-head\"><h2>직원 관리<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\" id=\"staffBody\"><\/div><\/dialog>\n<dialog id=\"dlgEvents\"><div class=\"dlg-head\"><h2>공휴일·기념일<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\" id=\"eventsBody\"><\/div><\/dialog>\n<dialog id=\"dlgImg\"><div class=\"dlg-head\"><h2>근무표 이미지<\/h2><button class=\"btn\" data-close>닫기<\/button><\/div><div class=\"dlg-body\"><p class=\"note\">이미지를 마우스 오른쪽 버튼으로 누르거나(휴대폰은 길게 눌러) \"이미지 저장\"을 선택하세요.<\/p><img id=\"imgOut\" alt=\"\" style=\"max-width:100%;height:auto;border:1px solid var(--line)\"><\/div><\/dialog>\n<div id=\"toast\" role=\"status\"><\/div>\n");
 (function () {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -437,56 +461,62 @@ document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div cla
     $('undo').disabled = !undoStack.length;
     commit(); renderAll();
     if ($('dlgStaff').open) renderStaff();
+    if ($('dlgTypes').open) renderTypes();
     if ($('dlgEvents').open) renderEvents();
   }
 
   /* ----- 표 ----- */
   function applyColors() {
-    document.documentElement.style.setProperty('--off', state.colors.off);
-    document.documentElement.style.setProperty('--leave', state.colors.leave);
-    document.documentElement.style.setProperty('--vac', state.colors.vac);
-    document.documentElement.style.setProperty('--edu', state.colors.edu);
-    $('colOff').value = state.colors.off; $('colLeave').value = state.colors.leave; $('colVac').value = state.colors.vac; $('colEdu').value = state.colors.edu;
+    let css = '';
+    state.types.forEach((t) => { css += `.grid td.t-${t.id}, .tool.t-${t.id}, .chip.t-${t.id} { background: ${t.color}; color: ${inkFor(t.color)}; }\n`; });
+    let el = $('typeCss');
+    if (!el) { el = document.createElement('style'); el.id = 'typeCss'; document.head.appendChild(el); }
+    el.textContent = css;
+    const off = typeOf(state, 'O');
+    document.documentElement.style.setProperty('--off', off ? off.color : '#bfbfbf');
     updatePub();
   }
   function renderPalette() {
-    const items = [['O', '휴무', 'off'], ['A', '연/월차', 'leave'], ['V', '휴가', 'vac'], ['E', '교육', 'edu'], ['', '근무(지우기)', 'work']];
-    $('palette').innerHTML = items.map(([c, l, k]) => `<button class="tool k-${k}" data-tool="${c}" aria-pressed="${tool === c}">${l}</button>`).join('');
+    if (tool && !typeOf(state, tool)) tool = 'O';
+    $('palette').innerHTML = state.types.map((t) => `<button class="tool t-${t.id}" data-tool="${t.id}" aria-pressed="${tool === t.id}">${esc(t.label)}</button>`).join('') +
+      `<button class="tool k-work" data-tool="" aria-pressed="${tool === ''}">근무(지우기)</button>`;
   }
   function renderGrid() {
     const { y, m } = view; const n = daysIn(y, m); const info = dayInfo(state, y, m);
     const staff = visibleStaff(state, ymKey(y, m));
+    const sumT = state.types.filter((t) => t.sum);
     const isNow = y === now.getFullYear() && m === now.getMonth() + 1;
     $('title').textContent = `${y}년 ${m}월`;
-    const cls = (d) => (info[d].red ? ' red' : '') + (isNow && d === now.getDate() ? ' today' : '');
-    let h = '<table class="grid"><colgroup><col class="c-name">' + '<col>'.repeat(n) + '<col class="c-sum"><col class="c-sum"><col class="c-sum"></colgroup><thead>';
+    const wk = (d) => (info[d].dow === 1 && d > 1 ? ' wk' : '');
+    const cls = (d) => (info[d].red ? ' red' : '') + (isNow && d === now.getDate() ? ' today' : '') + wk(d);
+    let h = '<table class="grid"><colgroup><col class="c-name">' + '<col>'.repeat(n) + '<col class="c-sum">'.repeat(sumT.length) + '</colgroup><thead>';
     h += '<tr><th class="name" rowspan="3">구분</th>';
     for (let d = 1; d <= n; d++) h += `<th class="dbtn${cls(d)}" data-date="${d}" title="눌러서 기념일 추가">${d}</th>`;
-    h += '<th rowspan="3" class="sum">휴무</th><th rowspan="3" class="sum">연/<br>월차</th><th rowspan="3" class="sum">휴가</th></tr><tr>';
+    h += sumT.map((t) => `<th rowspan="3" class="sum">${esc(t.label)}</th>`).join('') + '</tr><tr>';
     for (let d = 1; d <= n; d++) h += `<th class="${cls(d)}">${WD[info[d].dow]}</th>`;
     h += '</tr><tr class="notes">';
-    for (let d = 1; d <= n; d++) h += '<th>' + info[d].notes.map((x) => `<span class="n-${x.type}">${esc(x.t)}</span>`).join('') + '</th>';
+    for (let d = 1; d <= n; d++) h += `<th class="${wk(d)}">` + info[d].notes.map((x) => `<span class="n-${x.type}">${esc(x.t)}</span>`).join('') + '</th>';
     h += '</tr></thead><tbody>';
     state.groups.forEach((g) => {
       const list = staff.filter((s) => s.group === g.id);
       if (!list.length) return;
-      h += `<tr class="gsep"><td colspan="${n + 4}">${esc(g.name)}</td></tr>`;
+      h += `<tr class="gsep"><td colspan="${n + 1 + sumT.length}">${esc(g.name)}</td></tr>`;
       list.forEach((st, i) => {
         h += `<tr><th class="name"><span class="no">${i + 1}</span><button data-staff="${st.id}" title="직원 정보 수정">${esc(st.name)}</button></th>`;
         for (let d = 1; d <= n; d++) {
-          const v = cellVal(state, st, y, m, d);
-          h += `<td class="cell${v ? ' k-' + CODES[v].kind + ' v-' + v : ''}" data-s="${st.id}" data-d="${d}">${v ? CODES[v].label : ''}</td>`;
+          const v = cellVal(state, st, y, m, d); const t = typeOf(state, v);
+          h += `<td class="cell${t ? ' t-' + t.id + ' s' + Math.min(4, [...t.label].length) : ''}${wk(d)}" data-s="${st.id}" data-d="${d}">${t ? esc(t.label) : ''}</td>`;
         }
-        const t = staffTotals(state, st, y, m);
-        h += `<td class="sum">${t.off}</td><td class="sum">${t.leave || ''}</td><td class="sum">${t.vac || ''}</td></tr>`;
+        const tot = staffTotals(state, st, y, m);
+        h += sumT.map((t) => `<td class="sum">${tot[t.id] || ''}</td>`).join('') + '</tr>';
       });
     });
     h += '</tbody><tfoot>';
     const counts = workCounts(state, y, m);
     state.groups.filter((g) => g.count).forEach((g) => {
       h += `<tr><th class="name">${esc(g.name)} 근무</th>`;
-      for (let d = 1; d <= n; d++) h += `<td class="${info[d].red ? 'red' : ''}">${counts[g.id][d]}</td>`;
-      h += '<td></td><td></td><td></td></tr>';
+      for (let d = 1; d <= n; d++) h += `<td class="${(info[d].red ? 'red' : '') + wk(d)}">${counts[g.id][d]}</td>`;
+      h += '<td></td>'.repeat(sumT.length) + '</tr>';
     });
     h += '</tfoot></table>';
     if (!staff.length) h += `<div class="empty">${needLogin ? '아직 공유된 근무표가 없습니다.' : '이 달에 표시할 직원이 없습니다. 직원 관리에서 추가하세요.'}</div>`;
@@ -537,9 +567,56 @@ document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div cla
   });
 
   $('palette').addEventListener('click', (e) => { const b = e.target.closest('[data-tool]'); if (b) { tool = b.dataset.tool; renderPalette(); } });
-  ['colOff', 'colLeave', 'colVac', 'colEdu'].forEach((id) => $(id).addEventListener('change', (e) => {
-    pushUndo(); state.colors[{ colOff: 'off', colLeave: 'leave', colVac: 'vac', colEdu: 'edu' }[id]] = e.target.value; commit(); applyColors();
-  }));
+  /* ----- 종류·색 편집 ----- */
+  function renderTypes(focusId) {
+    let h = '<p class="note">버튼 이름과 색을 바꾸거나, 새 종류를 만들고 지울 수 있습니다. "합계 열"을 켜면 표 오른쪽에 직원별 일수가 나옵니다. 휴무는 고정 휴무에 쓰여 지울 수 없습니다(이름·색은 변경 가능).</p><div>';
+    state.types.forEach((t, i) => {
+      h += `<div class="trow">
+        <button class="btn small" data-tmove="${t.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="위로">↑</button>
+        <button class="btn small" data-tmove="${t.id}" data-dir="1" ${i === state.types.length - 1 ? 'disabled' : ''} aria-label="아래로">↓</button>
+        <input type="text" id="tl-${t.id}" data-tlabel="${t.id}" value="${esc(t.label)}" maxlength="6" aria-label="이름">
+        <label class="lbl" for="tc-${t.id}">색 <input type="color" id="tc-${t.id}" data-tcolor="${t.id}" value="${esc(t.color)}"></label>
+        <span class="chip t-${t.id}">${esc(t.label)}</span>
+        <label class="lbl" for="ts-${t.id}"><input type="checkbox" id="ts-${t.id}" data-tsum="${t.id}" ${t.sum ? 'checked' : ''}> 합계 열</label>
+        <span class="spacer"></span>
+        <button class="btn small danger" data-tdel="${t.id}" ${t.id === 'O' ? 'disabled' : ''}>삭제</button></div>`;
+    });
+    h += '</div><div><button class="btn" id="tadd">+ 종류 추가</button></div>';
+    $('typesBody').innerHTML = h;
+    if (focusId) { const el = $('tl-' + focusId); if (el) { el.focus(); el.select(); } }
+  }
+  $('openTypes').onclick = () => { renderTypes(); if (!$('dlgTypes').open) $('dlgTypes').showModal(); };
+  $('typesBody').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset; let focus = null;
+    if (d.tmove) {
+      const i = state.types.findIndex((t) => t.id === d.tmove); const j = i + (+d.dir);
+      if (j < 0 || j >= state.types.length) return;
+      pushUndo(); const t = state.types[i]; state.types[i] = state.types[j]; state.types[j] = t;
+    } else if (d.tdel) {
+      if (d.tdel === 'O') return;
+      const t = typeOf(state, d.tdel); pushUndo();
+      state.types = state.types.filter((x) => x.id !== d.tdel);
+      Object.values(state.ov).forEach((mo) => Object.values(mo).forEach((row) => {
+        Object.keys(row).forEach((k) => { if (row[k] === d.tdel) delete row[k]; });
+      }));
+      toast(`"${t.label}"을(를) 지웠습니다. 되돌리기로 취소할 수 있습니다.`);
+    } else if (b.id === 'tadd') {
+      pushUndo();
+      const palette = ['#ffd8a8', '#c5e1f5', '#e3c9f0', '#cfe8b9', '#f7c6c6', '#d9d2c5'];
+      const t = { id: newId('t'), label: '새 종류', color: palette[state.types.length % palette.length], sum: false };
+      state.types.push(t); focus = t.id;
+    } else return;
+    commit(); renderAll(); renderTypes(focus);
+  });
+  $('typesBody').addEventListener('change', (e) => {
+    const d = e.target.dataset;
+    if (d.tlabel) { pushUndo(); typeOf(state, d.tlabel).label = e.target.value.trim() || '이름'; }
+    else if (d.tcolor) { pushUndo(); typeOf(state, d.tcolor).color = e.target.value; }
+    else if (d.tsum) { pushUndo(); typeOf(state, d.tsum).sum = e.target.checked; }
+    else return;
+    commit(); renderAll(); renderTypes();
+  });
   const move = (dm) => { let m = view.m + dm, y = view.y; if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; } view = { y, m }; renderGrid(); };
   $('prev').onclick = () => move(-1); $('next').onclick = () => move(1);
   $('today').onclick = () => { view = { y: now.getFullYear(), m: now.getMonth() + 1 }; renderGrid(); };
@@ -680,10 +757,11 @@ document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div cla
     commit(); renderGrid();
   });
 
-  /* ----- JPG 저장 ----- */
-  async function drawImage() {
+  /* ----- JPG · PDF 저장 ----- */
+  async function drawSheet(S) {
     const { y, m } = view; const n = daysIn(y, m); const info = dayInfo(state, y, m);
     const staff = visibleStaff(state, ymKey(y, m)); const counts = workCounts(state, y, m);
+    const sumT = state.types.filter((t) => t.sum);
     const FF = '"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
     try { await Promise.all([document.fonts.load('500 14px ' + FF, '가'), document.fonts.load('700 14px ' + FF, '가')]); } catch (e) {}
     const P = 24, W_NO = 34, W_NAME = 92, W_D = 44, W_S = 50;
@@ -698,9 +776,8 @@ document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div cla
     const H_N = maxL ? maxL * 13 + 8 : 0;
     const groups = state.groups.map((gr) => ({ gr, list: staff.filter((s) => s.group === gr.id) })).filter((x) => x.list.length);
     const cg = state.groups.filter((gr) => gr.count);
-    const tableW = W_NO + W_NAME + n * W_D + 3 * W_S;
+    const tableW = W_NO + W_NAME + n * W_D + sumT.length * W_S;
     const tableH = H_T + 2 * H_H + H_N + groups.reduce((a, x) => a + H_SEP + x.list.length * H_R, 0) + (cg.length ? H_SEP + cg.length * H_C : 0);
-    const S = 2;
     cv.width = (tableW + 2 * P) * S; cv.height = (tableH + 2 * P + H_L) * S;
     g.scale(S, S);
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, cv.width, cv.height);
@@ -712,13 +789,15 @@ document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div cla
     let yy = P;
     const headH = H_T + 2 * H_H + H_N;
     box(X0, yy, W_NO + W_NAME, headH); font(700, 17); text('구분', X0, yy, W_NO + W_NAME, headH);
-    box(XD, yy, n * W_D + 3 * W_S, H_T); font(700, 26); text(`${y}년 ${m}월 근무표`, XD, yy, n * W_D + 3 * W_S, H_T);
+    box(XD, yy, n * W_D + sumT.length * W_S, H_T); font(700, 26); text(`${y}년 ${m}월 근무표`, XD, yy, n * W_D + sumT.length * W_S, H_T);
     yy += H_T;
+    const yDays = yy;
     const subH = 2 * H_H + H_N;
-    font(600, 13);
-    box(XS, yy, W_S, subH); text('휴무', XS, yy, W_S, subH);
-    box(XS + W_S, yy, W_S, subH); text('연/', XS + W_S, yy - 9, W_S, subH); text('월차', XS + W_S, yy + 9, W_S, subH);
-    box(XS + 2 * W_S, yy, W_S, subH); text('휴가', XS + 2 * W_S, yy, W_S, subH);
+    sumT.forEach((t, i) => {
+      const x = XS + i * W_S; box(x, yy, W_S, subH); font(600, 12);
+      const ls = wrap(t.label, W_S - 8);
+      ls.forEach((ln, k) => text(ln, x, yy + (k - (ls.length - 1) / 2) * 15, W_S, subH));
+    });
     for (let d = 1; d <= n; d++) {
       const col = info[d].red ? C.red : C.ink;
       font(700, 14);
@@ -739,14 +818,12 @@ document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div cla
         let nm = st.name; while (nm.length > 1 && g.measureText(nm).width > W_NAME - 8) nm = nm.slice(0, -1);
         text(nm, X0 + W_NO, yy, W_NAME, H_R);
         for (let d = 1; d <= n; d++) {
-          const v = cellVal(state, st, y, m, d);
-          box(dx(d), yy, W_D, H_R, v ? state.colors[CODES[v].kind] : null);
-          if (v) { font(700, v === 'A' ? 11 : 13); text(CODES[v].label, dx(d), yy, W_D, H_R); }
+          const t = typeOf(state, cellVal(state, st, y, m, d));
+          box(dx(d), yy, W_D, H_R, t ? t.color : null);
+          if (t) { const L = [...t.label].length; font(700, L <= 2 ? 13 : L === 3 ? 12 : 10.5); text(t.label, dx(d), yy, W_D, H_R, inkFor(t.color)); }
         }
-        const t = staffTotals(state, st, y, m); font(500, 13);
-        box(XS, yy, W_S, H_R); text(t.off, XS, yy, W_S, H_R, C.muted);
-        box(XS + W_S, yy, W_S, H_R); if (t.leave) text(t.leave, XS + W_S, yy, W_S, H_R, C.muted);
-        box(XS + 2 * W_S, yy, W_S, H_R); if (t.vac) text(t.vac, XS + 2 * W_S, yy, W_S, H_R, C.muted);
+        const tot = staffTotals(state, st, y, m); font(500, 13);
+        sumT.forEach((t, k) => { box(XS + k * W_S, yy, W_S, H_R); if (tot[t.id]) text(tot[t.id], XS + k * W_S, yy, W_S, H_R, C.muted); });
         yy += H_R;
       });
     });
@@ -755,21 +832,45 @@ document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div cla
       cg.forEach((gr) => {
         box(X0, yy, W_NO + W_NAME, H_C); font(700, 14); text(gr.name, X0, yy, W_NO + W_NAME, H_C);
         for (let d = 1; d <= n; d++) { box(dx(d), yy, W_D, H_C); text(counts[gr.id][d], dx(d), yy, W_D, H_C, info[d].red ? C.red : C.ink); }
-        box(XS, yy, W_S, H_C); box(XS + W_S, yy, W_S, H_C); box(XS + 2 * W_S, yy, W_S, H_C);
+        sumT.forEach((t, k) => box(XS + k * W_S, yy, W_S, H_C));
         yy += H_C;
       });
     }
+    // 주 구분 굵은 선 (월요일 앞)
+    g.strokeStyle = C.ink; g.lineWidth = 2.5;
+    for (let d = 2; d <= n; d++) if (info[d].dow === 1) { g.beginPath(); g.moveTo(dx(d) + 0.5, yDays); g.lineTo(dx(d) + 0.5, yy); g.stroke(); }
+    g.strokeStyle = C.line; g.lineWidth = 1;
     yy += 14; font(500, 13); g.textAlign = 'left';
-    box(X0, yy, 30, 20, state.colors.off); g.fillStyle = C.ink; g.fillText('휴무', X0 + 38, yy + 11);
-    box(X0 + 90, yy, 30, 20, state.colors.leave); g.fillStyle = C.ink; g.fillText('연/월차', X0 + 128, yy + 11);
-    box(X0 + 200, yy, 30, 20, state.colors.vac); g.fillStyle = C.ink; g.fillText('휴가', X0 + 238, yy + 11);
-    box(X0 + 290, yy, 30, 20, state.colors.edu); g.fillStyle = C.ink; g.fillText('교육', X0 + 328, yy + 11);
-    return new Promise((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('blob'))), 'image/jpeg', 0.93));
+    let lx = X0;
+    state.types.forEach((t) => {
+      box(lx, yy, 30, 20, t.color); g.fillStyle = C.ink; g.fillText(t.label, lx + 38, yy + 11);
+      lx += 38 + g.measureText(t.label).width + 22;
+    });
+    return cv;
   }
-  $('saveImg').onclick = async () => {
-    const filename = `${view.y}년 ${view.m}월 근무표.jpg`;
-    let blob;
-    try { blob = await drawImage(); } catch (e) { toast('이미지를 만들지 못했습니다.'); return; }
+  const toBlob = (cv, q) => new Promise((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error('blob'))), 'image/jpeg', q));
+  async function buildPdf(cv) {
+    const jpg = new Uint8Array(await (await toBlob(cv, 0.95)).arrayBuffer());
+    const PW = 841.89, PH = 595.28, M = 20;
+    const s = Math.min((PW - 2 * M) / cv.width, (PH - 2 * M) / cv.height);
+    const w = cv.width * s, hh = cv.height * s, x = (PW - w) / 2, yb = PH - M - hh;
+    const enc = new TextEncoder(); const parts = []; const offs = []; let pos = 0;
+    const put = (v) => { const b = typeof v === 'string' ? enc.encode(v) : v; parts.push(b); pos += b.length; };
+    const obj = (i, body) => { offs[i] = pos; put(`${i} 0 obj\n`); body(); put('\nendobj\n'); };
+    const content = `q ${w.toFixed(2)} 0 0 ${hh.toFixed(2)} ${x.toFixed(2)} ${yb.toFixed(2)} cm /Im0 Do Q`;
+    put('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    obj(1, () => put('<< /Type /Catalog /Pages 2 0 R >>'));
+    obj(2, () => put('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'));
+    obj(3, () => put(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`));
+    obj(4, () => put(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
+    obj(5, () => { put(`<< /Type /XObject /Subtype /Image /Width ${cv.width} /Height ${cv.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`); put(jpg); put('\nendstream'); });
+    const xref = pos;
+    put('xref\n0 6\n0000000000 65535 f \n' + [1, 2, 3, 4, 5].map((i) => String(offs[i]).padStart(10, '0') + ' 00000 n \n').join(''));
+    put(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    return new Blob(parts, { type: 'application/pdf' });
+  }
+  let imgUrl = null;
+  async function saveFile(filename, blob, isImage) {
     if (downloads) {
       try { await downloads.save({ filename, data: blob }); toast(`${filename} 저장을 요청했습니다.`); return; }
       catch (e) { if (e && e.code === 'declined') return; }
@@ -782,12 +883,22 @@ document.body.insertAdjacentHTML('afterbegin', "<div class=\"wrap\">\n  <div cla
         toast(`${filename} 파일로 저장했습니다.`); return;
       } catch (e) {}
     }
+    if (!isImage) { toast('이 화면에서는 PDF 저장을 쓸 수 없습니다. JPG로 저장을 이용해 주세요.'); return; }
     if (imgUrl) URL.revokeObjectURL(imgUrl);
     imgUrl = URL.createObjectURL(blob);
     $('imgOut').src = imgUrl; $('imgOut').alt = filename.replace('.jpg', '');
     if (!$('dlgImg').open) $('dlgImg').showModal();
+  }
+  $('saveImg').onclick = async () => {
+    let blob;
+    try { blob = await toBlob(await drawSheet(2), 0.93); } catch (e) { toast('이미지를 만들지 못했습니다.'); return; }
+    saveFile(`${view.y}년 ${view.m}월 근무표.jpg`, blob, true);
   };
-  let imgUrl = null;
+  $('savePdf').onclick = async () => {
+    let blob;
+    try { blob = await buildPdf(await drawSheet(3)); } catch (e) { toast('PDF를 만들지 못했습니다.'); return; }
+    saveFile(`${view.y}년 ${view.m}월 근무표.pdf`, blob, false);
+  };
 
   /* ----- 공유 페이지에 반영 (근무표를 페이지 자체에 담아 다시 게시) ----- */
   $('pubSnap').onclick = async () => {
