@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>디자이너 급여계산기</title>
+<meta name="description" content="매출을 입력하면 디자이너 실지급액을 계산합니다.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="블랭크유 · 디자이너 급여계산기">
+<meta property="og:description" content="매출을 입력하면 디자이너 실지급액을 계산합니다.">
+<meta property="og:image" content="https://beautygo-sketch.github.io/work-schedule/salary/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://beautygo-sketch.github.io/work-schedule/salary/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* 레이아웃: 왼쪽은 엑셀 순서대로 입력 구역, 오른쪽은 따라다니는 급여 명세. 좁은 화면에서는 한 줄로 쌓인다. */
+:root {
+  --bg: #f3f2f6;
+  --surface: #ffffff;
+  --sunken: #f7f6fa;
+  --ink: #1e1a27;
+  --muted: #6a6478;
+  --line: #dfdbe8;
+  --accent: #5a3b8f;
+  --accent-soft: #ece6f6;
+  --on-accent: #ffffff;
+  --minus: #a8324a;
+  --font-display: "Gowun Batang", "Noto Serif KR", serif;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #15131b;
+    --surface: #1f1c28;
+    --sunken: #191620;
+    --ink: #ece9f3;
+    --muted: #a39db3;
+    --line: #353044;
+    --accent: #b79bea;
+    --accent-soft: #2e2642;
+    --on-accent: #1a1425;
+    --minus: #f08aa0;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #15131b;
+  --surface: #1f1c28;
+  --sunken: #191620;
+  --ink: #ece9f3;
+  --muted: #a39db3;
+  --line: #353044;
+  --accent: #b79bea;
+  --accent-soft: #2e2642;
+  --on-accent: #1a1425;
+  --minus: #f08aa0;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
+h1 { font-family: var(--font-display); font-size: 28px; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.top p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.top-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.card h2 { font-size: 15px; font-weight: 600; margin: 0 0 4px; display: flex; align-items: baseline; gap: 8px; }
+.card h2 .step { color: var(--accent); font-size: 12px; font-weight: 600; }
+.card .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+.who { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > label, .lbl { font-size: 12.5px; color: var(--muted); }
+input, select, button { font: inherit; color: inherit; }
+input[type="text"], input[type="month"], select {
+  width: 100%; min-width: 0; height: 38px; padding: 0 10px;
+  background: var(--sunken); border: 1px solid var(--line); border-radius: 7px;
+}
+input.num { text-align: right; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rows { display: flex; flex-direction: column; }
+.row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.9fr); gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row .name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rate { font-size: 11.5px; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.calc { text-align: right; color: var(--muted); white-space: nowrap; }
+.calc.minus { color: var(--minus); }
+.calc.plus { color: var(--accent); }
+.result { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 12px; margin-top: 10px; background: var(--sunken); border-radius: 7px; }
+.result + .result { margin-top: 6px; }
+.result b { font-weight: 600; font-size: 16px; }
+.result small { display: block; color: var(--muted); font-size: 12px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+.retail th, .retail td { padding: 6px 6px; border-top: 1px solid var(--line); text-align: right; }
+.retail th:first-child, .retail td:first-child { text-align: left; padding-left: 0; }
+.retail thead th { border-top: 0; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.retail td:first-child { min-width: 118px; }
+.retail input { min-width: 104px; }
+.retail tr.sum td { background: var(--sunken); font-weight: 600; }
+.retail tr.sum td:first-child { padding-left: 8px; }
+.ref { margin-top: 8px; font-size: 12.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button { cursor: pointer; height: 36px; padding: 0 14px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+button.link { height: auto; padding: 2px 8px; font-size: 12.5px; color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+.tiers th, .tiers td { padding: 6px 8px; text-align: center; border: 1px solid var(--line); font-size: 12.5px; white-space: nowrap; }
+.tiers th { color: var(--muted); font-weight: 500; background: var(--sunken); }
+.tiers td:first-child, .tiers th:first-child { text-align: left; }
+.tiers tr.on td:first-child { font-weight: 600; color: var(--accent); }
+.tiers td.on { background: var(--accent); color: var(--on-accent); font-weight: 600; border-color: var(--accent); }
+.pctline { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 12px; }
+.pctline label.chk { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.pctline input[type="text"] { width: 84px; }
+.pctbig { font-size: 22px; font-weight: 600; color: var(--accent); }
+.slip { position: sticky; top: 16px; padding: 0; overflow: hidden; }
+.slip .head { background: var(--accent); color: var(--on-accent); padding: 18px; }
+.slip .head .who-line { font-size: 12.5px; opacity: 0.85; min-height: 19px; }
+.slip .head .lbl { color: inherit; opacity: 0.85; }
+.slip .net { font-family: var(--font-display); font-size: 34px; line-height: 1.2; overflow-wrap: anywhere; }
+.slip .body { padding: 8px 18px 18px; }
+.slip dl { margin: 0; }
+.slip .ln { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); }
+.slip .ln:first-child { border-top: 0; }
+.slip dt { color: var(--muted); }
+.slip dd { margin: 0; text-align: right; white-space: nowrap; }
+.slip .ln.strong dt, .slip .ln.strong dd { color: var(--ink); font-weight: 600; }
+.slip .ln.minus dd { color: var(--minus); }
+.slip .foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.slip .foot span { font-size: 12.5px; color: var(--muted); }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.badge { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 99px; border: 1px dashed var(--accent); color: var(--accent); }
+[hidden] { display: none !important; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .slip { position: static; }
+}
+@media (max-width: 480px) {
+  .who { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .row .calc { grid-column: 1 / -1; padding-bottom: 2px; }
+  .card { padding: 14px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>디자이너 급여계산기</h1>
+      <p>엑셀 급여 시트와 같은 수식으로 계산합니다. 금액을 입력하면 바로 반영됩니다.</p>
+    </div>
+    <div class="top-actions">
+      <span class="badge" id="exampleBadge" hidden>예시 값이 들어 있습니다</span>
+      <button type="button" id="btnClear">모두 지우기</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="col">
+
+      <section class="card">
+        <div class="who">
+          <div class="field"><label for="role">직책</label>
+            <select id="role">
+              <option value="designer">디자이너</option>
+              <option value="manager">실장 / 팀장</option>
+              <option value="vice">부원장</option>
+              <option value="director">원장</option>
+            </select>
+          </div>
+          <div class="field"><label for="name">이름</label><input type="text" id="name" autocomplete="off"></div>
+          <div class="field"><label for="month">급여 월</label><input type="month" id="month"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">1</span>시술 매출</h2>
+        <p class="hint">이달매출에서 수수료와 재료 공제를 빼고 포인트결제를 더한 뒤, 부가세 10%를 제외합니다.</p>
+        <div class="rows" id="serviceRows"></div>
+        <div class="result"><span>급여정산매출<small>이달매출 − 공제 합계 + 포인트결제</small></span><b id="outSettle">0</b></div>
+        <div class="result"><span>부가세 10% 제외금액<small>급여정산매출 × 0.9</small></span><b id="outSettleNet">0</b></div>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">2</span>시술 프로테이지</h2>
+        <p class="hint">직책별 기본 요율에 이달매출(점판제외) 구간에 따라 −2% ~ +2%가 붙습니다. 단위 만원.</p>
+        <div class="tablewrap">
+          <table class="tiers" id="tierTable"></table>
+        </div>
+        <div class="pctline">
+          <span>적용 요율 <span class="pctbig" id="outPct">0%</span></span>
+          <label class="chk" for="pctManual"><input type="checkbox" id="pctManual"> 요율 직접 입력</label>
+          <span id="pctManualBox" hidden><input type="text" class="num" id="pctValue" inputmode="decimal" aria-label="직접 입력 요율(%)"> %</span>
+        </div>
+        <div class="result"><span>시술 프로테이지<small>부가세 제외금액 × 적용 요율</small></span><b id="outCommission">0</b></div>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">3</span>점판</h2>
+        <p class="hint">점판매출에서 카드·네이버페이 수수료를 빼고 부가세를 제외합니다. 일반 점판은 20%가 수당입니다.</p>
+        <div class="tablewrap">
+          <table class="retail">
+            <thead><tr><th>항목</th><th>일반 점판</th><th>블랭크 점판</th></tr></thead>
+            <tbody>
+              <tr><td>점판매출</td><td><input type="text" class="num money" id="rSales" inputmode="numeric" aria-label="일반 점판매출"></td><td><input type="text" class="num money" id="bSales" inputmode="numeric" aria-label="블랭크 점판매출"></td></tr>
+              <tr><td>점판 카드매출</td><td><input type="text" class="num money" id="rCard" inputmode="numeric" aria-label="일반 점판 카드매출"></td><td><input type="text" class="num money" id="bCard" inputmode="numeric" aria-label="블랭크 점판 카드매출"></td></tr>
+              <tr><td>카드수수료 <span class="rate">3%</span></td><td class="calc minus" id="rCardFee">0</td><td class="calc minus" id="bCardFee">0</td></tr>
+              <tr><td>점판 네이버페이</td><td><input type="text" class="num money" id="rNaver" inputmode="numeric" aria-label="일반 점판 네이버페이"></td><td><input type="text" class="num money" id="bNaver" inputmode="numeric" aria-label="블랭크 점판 네이버페이"></td></tr>
+              <tr><td>네이버페이 수수료 <span class="rate">2.9%</span></td><td class="calc minus" id="rNaverFee">0</td><td class="calc minus" id="bNaverFee">0</td></tr>
+              <tr><td>급여정산 점판매출</td><td class="calc" id="rSettle">0</td><td class="calc" id="bSettle">0</td></tr>
+              <tr><td>부가세 10% 제외금액</td><td class="calc" id="rNet">0</td><td class="calc" id="bNet">0</td></tr>
+              <tr class="sum"><td>점판수당</td><td id="rAllow">0</td><td><input type="text" class="num money" id="bAllow" inputmode="numeric" aria-label="블랭크 점판수당 직접 입력"></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="ref">
+          <span>블랭크 점판수당은 엑셀처럼 직접 입력합니다. 원가 50% 기준 참고값 <b id="bRef">0</b></span>
+          <button type="button" class="link" id="btnRef">참고값 넣기</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2><span class="step">4</span>수당과 공제</h2>
+        <p class="hint">강의료 및 수당은 원천징수 전 합계에 더해지고, 공제액은 원천징수 후 급여에서 빠집니다.</p>
+        <div class="rows" id="extraRows"></div>
+      </section>
+
+      <p class="note">계산은 엑셀과 같이 소수점까지 그대로 하고, 화면에는 원 단위로 반올림해 보여 줍니다. 입력값은 이 브라우저에만 저장됩니다.</p>
+    </div>
+
+    <aside class="card slip" aria-live="polite">
+      <div class="head">
+        <div class="who-line" id="slipWho"></div>
+        <div class="lbl">실지급액</div>
+        <div class="net" id="outNet">0원</div>
+      </div>
+      <div class="body">
+        <dl>
+          <div class="ln"><dt id="slipPctLabel">시술 프로테이지</dt><dd id="sCommission">0</dd></div>
+          <div class="ln"><dt>점판수당 (20%)</dt><dd id="sRAllow">0</dd></div>
+          <div class="ln"><dt>블랭크 점판수당</dt><dd id="sBAllow">0</dd></div>
+          <div class="ln"><dt>강의료 및 수당</dt><dd id="sExtra">0</dd></div>
+          <div class="ln strong"><dt>합계</dt><dd id="sGross">0</dd></div>
+          <div class="ln minus"><dt>원천징수 (3.3%)</dt><dd id="sTax">0</dd></div>
+          <div class="ln strong"><dt>시술 토탈 급여</dt><dd id="sTotal">0</dd></div>
+          <div class="ln minus"><dt>공제액 합계</dt><dd id="sDeduct">0</dd></div>
+          <div class="ln strong"><dt>실지급액</dt><dd id="sNet">0</dd></div>
+        </dl>
+        <div class="foot">
+          <button type="button" class="primary" id="btnCopy">명세 복사</button>
+          <span id="copyMsg" role="status"></span>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+/*CALC-START*/
+var RATES = { card: 0.03, naver: 0.029, hairBasic: 0.25, hairLong: 0.30, mtsmp: 0.10, wigM: 0.25, wigF: 0.30,
+              vat: 0.9, retail: 0.20, withholding: 0.033 };
+// 구간 경계(만원): 이 값 이상이면 한 단계씩 올라간다. -2, -1, 0, +1, +2
+var ROLES = {
+  designer: { label: '디자이너',    base: 32, cuts: [800, 1000, 1500, 2000] },
+  manager:  { label: '실장/팀장',   base: 35, cuts: [1000, 1500, 2000, 3000] },
+  vice:     { label: '부원장',      base: 37, cuts: [1500, 2000, 2500, 3500] },
+  director: { label: '원장',        base: 39, cuts: [2000, 2500, 3000, 4000] }
+};
+function tierOf(roleKey, sales) {
+  var cuts = ROLES[roleKey].cuts, step = -2;
+  for (var i = 0; i < cuts.length; i++) if (sales >= cuts[i] * 10000) step++;
+  return step;
+}
+function calc(v) {
+  var o = {};
+  o.dCard = v.card * RATES.card;
+  o.dNaver = v.naver * RATES.naver;
+  o.dHairBasic = v.hairBasic * RATES.hairBasic;
+  o.dHairLong = v.hairLong * RATES.hairLong;
+  o.dMtsmp = v.mtsmp * RATES.mtsmp;
+  o.dWigM = v.wigM * RATES.wigM;
+  o.dWigF = v.wigF * RATES.wigF;
+  o.settle = v.sales - o.dCard - o.dNaver - o.dHairBasic - o.dHairLong - o.dMtsmp - o.dWigM - o.dWigF + v.points;
+  o.settleNet = o.settle * RATES.vat;
+
+  o.rCardFee = v.rCard * RATES.card;   o.bCardFee = v.bCard * RATES.card;
+  o.rNaverFee = v.rNaver * RATES.naver; o.bNaverFee = v.bNaver * RATES.naver;
+  o.rSettle = v.rSales - o.rCardFee - o.rNaverFee;
+  o.bSettle = v.bSales - o.bCardFee - o.bNaverFee;
+  o.rNet = o.rSettle * RATES.vat;      o.bNet = o.bSettle * RATES.vat;
+  o.rAllow = o.rNet * RATES.retail;
+  o.bRef = Math.max(0, (v.bSales * 0.5 - o.bCardFee - o.bNaverFee) * RATES.vat * 0.5);
+
+  o.tier = tierOf(v.role, v.sales);
+  o.autoPct = ROLES[v.role].base + o.tier;
+  o.pct = v.pctManual ? v.pctValue : o.autoPct;
+  o.commission = o.settleNet * o.pct / 100;
+
+  o.gross = o.rAllow + v.bAllow + o.commission + v.extra;
+  o.tax = o.gross * RATES.withholding;
+  o.total = o.gross - o.tax;
+  o.deduct = v.dProduct + v.dMeal + v.dRedo + v.dSms;
+  o.net = o.total - o.deduct;
+  return o;
+}
+/*CALC-END*/
+
+var SERVICE = [
+  { id: 'sales',     label: '이달매출 (점판제외)' },
+  { id: 'points',    label: '포인트결제', plus: true },
+  { id: 'card',      label: '카드매출', rate: '3%', out: 'dCard' },
+  { id: 'naver',     label: '네이버페이', rate: '2.9%', out: 'dNaver' },
+  { id: 'hairBasic', label: '증모매출 기본', rate: '25%', out: 'dHairBasic' },
+  { id: 'hairLong',  label: '롱다발 · 붙임머리 · 항암', rate: '30%', out: 'dHairLong' },
+  { id: 'mtsmp',     label: 'MTSMP', rate: '10%', out: 'dMtsmp' },
+  { id: 'wigM',      label: '가발 (남)', rate: '25%', out: 'dWigM' },
+  { id: 'wigF',      label: '가발 (여)', rate: '30%', out: 'dWigF' }
+];
+var EXTRA = [
+  { id: 'extra',    label: '강의료 및 수당', tag: '더함' },
+  { id: 'dProduct', label: '제품구입 + 본인시술', tag: '공제' },
+  { id: 'dMeal',    label: '식비', tag: '공제' },
+  { id: 'dRedo',    label: '재시술', tag: '공제' },
+  { id: 'dSms',     label: '네이버문자', tag: '공제' }
+];
+var MONEY_IDS = ['sales','points','card','naver','hairBasic','hairLong','mtsmp','wigM','wigF',
+  'rSales','rCard','rNaver','bSales','bCard','bNaver','bAllow','extra','dProduct','dMeal','dRedo','dSms'];
+var EXAMPLE = { role: 'director', name: '', month: '', sales: 26000000, points: 300000, card: 17000000, naver: 2500000,
+  hairBasic: 9000000, hairLong: 2000000, mtsmp: 0, wigM: 0, wigF: 500000,
+  rSales: 200000, rCard: 150000, rNaver: 50000, bSales: 176000, bCard: 176000, bNaver: 0, bAllow: 37224,
+  extra: 50000, dProduct: 20000, dMeal: 15000, dRedo: 0, dSms: 3000, pctManual: false, pctValue: 39 };
+var KEY = 'designer-pay-calculator-v1';
+var $ = function (id) { return document.getElementById(id); };
+var won = function (n) { return Math.round(n).toLocaleString('ko-KR'); };
+var toNum = function (s) { var n = parseFloat(String(s).replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n : 0; };
+
+function buildRows(host, defs) {
+  host.innerHTML = defs.map(function (d) {
+    var chip = d.rate ? '<span class="rate">' + d.rate + ' 공제</span>' : (d.tag ? '<span class="rate">' + d.tag + '</span>' : '');
+    return '<div class="row"><div class="name"><label for="' + d.id + '">' + d.label + '</label>' + chip + '</div>' +
+      '<input type="text" class="num money" id="' + d.id + '" inputmode="numeric">' +
+      '<div class="calc" id="c_' + d.id + '"></div></div>';
+  }).join('');
+}
+function buildTiers() {
+  var h = '<thead><tr><th>직책</th><th>기본</th><th>−2</th><th>−1</th><th>0</th><th>+1</th><th>+2</th></tr></thead><tbody>';
+  Object.keys(ROLES).forEach(function (k) {
+    var r = ROLES[k], c = r.cuts.map(function (x) { return x.toLocaleString('ko-KR'); });
+    var cells = [c[0] + ' 미만', c[0] + '–' + c[1], c[1] + '–' + c[2], c[2] + '–' + c[3], c[3] + ' 이상'];
+    h += '<tr data-role="' + k + '"><td>' + r.label + '</td><td>' + r.base + '%</td>' +
+      cells.map(function (t, i) { return '<td data-step="' + (i - 2) + '">' + t + '</td>'; }).join('') + '</tr>';
+  });
+  $('tierTable').innerHTML = h + '</tbody>';
+}
+function read() {
+  var v = { role: $('role').value, pctManual: $('pctManual').checked, pctValue: toNum($('pctValue').value) };
+  MONEY_IDS.forEach(function (id) { v[id] = toNum($(id).value); });
+  return v;
+}
+function fill(s) {
+  $('role').value = s.role || 'designer';
+  $('name').value = s.name || '';
+  $('month').value = s.month || '';
+  $('pctManual').checked = !!s.pctManual;
+  $('pctValue').value = s.pctValue || '';
+  MONEY_IDS.forEach(function (id) { $(id).value = s[id] ? Number(s[id]).toLocaleString('ko-KR') : ''; });
+}
+function save() {
+  try {
+    var s = read(); s.name = $('name').value; s.month = $('month').value;
+    localStorage.setItem(KEY, JSON.stringify(s));
+  } catch (e) {}
+}
+var last = null;
+function render() {
+  var v = read(), o = calc(v);
+  last = { v: v, o: o };
+  SERVICE.forEach(function (d) {
+    var el = $('c_' + d.id);
+    if (d.out) { el.textContent = '− ' + won(o[d.out]); el.className = 'calc minus'; }
+    else if (d.plus) { el.textContent = v.points ? '+ ' + won(v.points) : ''; el.className = 'calc plus'; }
+  });
+  $('outSettle').textContent = won(o.settle);
+  $('outSettleNet').textContent = won(o.settleNet);
+  ['rCardFee','bCardFee','rNaverFee','bNaverFee'].forEach(function (k) { $(k).textContent = '− ' + won(o[k]); });
+  ['rSettle','bSettle','rNet','bNet','rAllow','bRef'].forEach(function (k) { $(k).textContent = won(o[k]); });
+
+  var rows = $('tierTable').querySelectorAll('tbody tr');
+  for (var i = 0; i < rows.length; i++) {
+    var on = rows[i].getAttribute('data-role') === v.role;
+    rows[i].className = on ? 'on' : '';
+    var tds = rows[i].querySelectorAll('td[data-step]');
+    for (var j = 0; j < tds.length; j++) tds[j].className = (on && Number(tds[j].getAttribute('data-step')) === o.tier) ? 'on' : '';
+  }
+  $('pctManualBox').hidden = !v.pctManual;
+  var pctText = (Math.round(o.pct * 100) / 100) + '%';
+  $('outPct').textContent = pctText;
+  $('outCommission').textContent = won(o.commission);
+  $('slipPctLabel').textContent = '시술 프로테이지 (' + pctText + ')';
+
+  $('sCommission').textContent = won(o.commission);
+  $('sRAllow').textContent = won(o.rAllow);
+  $('sBAllow').textContent = won(v.bAllow);
+  $('sExtra').textContent = won(v.extra);
+  $('sGross').textContent = won(o.gross);
+  $('sTax').textContent = '− ' + won(o.tax);
+  $('sTotal').textContent = won(o.total);
+  $('sDeduct').textContent = '− ' + won(o.deduct);
+  $('sNet').textContent = won(o.net);
+  $('outNet').textContent = won(o.net) + '원';
+  var m = $('month').value, who = [];
+  if (m) who.push(m.slice(0, 4) + '년 ' + Number(m.slice(5)) + '월');
+  who.push(ROLES[v.role].label);
+  if ($('name').value.trim()) who.push($('name').value.trim());
+  $('slipWho').textContent = who.join(' · ');
+}
+function slipText() {
+  var v = last.v, o = last.o;
+  return [
+    $('slipWho').textContent + ' 급여 명세',
+    '이달매출(점판제외) ' + won(v.sales) + ' / 포인트결제 ' + won(v.points),
+    '급여정산매출 ' + won(o.settle) + ' → 부가세 제외 ' + won(o.settleNet),
+    '시술 프로테이지(' + $('outPct').textContent + ') ' + won(o.commission),
+    '점판수당 ' + won(o.rAllow) + ' / 블랭크 점판수당 ' + won(v.bAllow),
+    '강의료 및 수당 ' + won(v.extra),
+    '합계 ' + won(o.gross),
+    '원천징수(3.3%) -' + won(o.tax),
+    '시술 토탈 급여 ' + won(o.total),
+    '공제액 -' + won(o.deduct) + ' (제품구입+본인시술 ' + won(v.dProduct) + ', 식비 ' + won(v.dMeal) + ', 재시술 ' + won(v.dRedo) + ', 네이버문자 ' + won(v.dSms) + ')',
+    '실지급액 ' + won(o.net) + '원'
+  ].join('\n');
+}
+
+buildRows($('serviceRows'), SERVICE);
+buildRows($('extraRows'), EXTRA);
+buildTiers();
+
+var stored = null;
+try { stored = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+fill(stored || EXAMPLE);
+$('exampleBadge').hidden = !!stored;
+render();
+
+document.addEventListener('input', function (e) {
+  var t = e.target;
+  if (t.classList && t.classList.contains('money')) {
+    var digits = t.value.replace(/[^0-9]/g, '');
+    t.value = digits ? Number(digits).toLocaleString('ko-KR') : '';
+  }
+  $('exampleBadge').hidden = true;
+  render(); save();
+});
+document.addEventListener('change', function () { render(); save(); });
+$('btnRef').addEventListener('click', function () {
+  $('bAllow').value = won(last.o.bRef);
+  $('exampleBadge').hidden = true;
+  render(); save();
+});
+$('btnClear').addEventListener('click', function () {
+  fill({ role: $('role').value });
+  $('exampleBadge').hidden = true;
+  render(); save();
+});
+$('btnCopy').addEventListener('click', function () {
+  var msg = $('copyMsg');
+  try {
+    navigator.clipboard.writeText(slipText()).then(function () { msg.textContent = '복사했습니다.'; },
+      function () { msg.textContent = '복사가 막혀 있습니다. 화면 내용을 직접 선택해 주세요.'; });
+  } catch (e) { msg.textContent = '복사가 막혀 있습니다. 화면 내용을 직접 선택해 주세요.'; }
+  setTimeout(function () { msg.textContent = ''; }, 4000);
+});
+</script>
+</body>
+</html>
