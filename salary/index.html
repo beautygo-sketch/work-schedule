@@ -14,7 +14,7 @@
 <meta property="og:url" content="https://beautygo-sketch.github.io/work-schedule/salary/">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* 레이아웃: 왼쪽은 엑셀 순서대로 입력 구역, 오른쪽은 따라다니는 급여 명세. 좁은 화면에서는 한 줄로 쌓인다. */
 :root {
@@ -138,10 +138,15 @@ button.link { height: auto; padding: 2px 8px; font-size: 12.5px; color: var(--ac
 .slip dd { margin: 0; text-align: right; white-space: nowrap; }
 .slip .ln.strong dt, .slip .ln.strong dd { color: var(--ink); font-weight: 600; }
 .slip .ln.minus dd { color: var(--minus); }
-.slip .foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.slip .foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 12px; }
 .slip .foot span { font-size: 12.5px; color: var(--muted); }
 .note { font-size: 12.5px; color: var(--muted); margin: 0; }
 .badge { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 99px; border: 1px dashed var(--accent); color: var(--accent); }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); padding: 0; width: min(640px, calc(100vw - 24px)); max-height: calc(100vh - 32px); }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+.dlg-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+.dlg-body { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.dlg-body img { max-width: 100%; height: auto; border: 1px solid var(--line); }
 [hidden] { display: none !important; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -260,13 +265,16 @@ button.link { height: auto; padding: 2px 8px; font-size: 12.5px; color: var(--ac
           <div class="ln strong"><dt>실지급액</dt><dd id="sNet">0</dd></div>
         </dl>
         <div class="foot">
-          <button type="button" class="primary" id="btnCopy">명세 복사</button>
-          <span id="copyMsg" role="status"></span>
+          <button type="button" class="primary" id="btnJpg">JPG로 저장</button>
+          <button type="button" class="primary" id="btnPdf">PDF로 저장</button>
+          <span id="saveMsg" role="status"></span>
         </div>
       </div>
     </aside>
   </div>
 </div>
+
+<dialog id="dlgImg"><div class="dlg-head"><span>급여 명세 이미지</span><button type="button" id="dlgClose">닫기</button></div><div class="dlg-body"><p class="note">이미지를 마우스 오른쪽 버튼으로 누르거나(휴대폰은 길게 눌러) "이미지 저장"을 선택하세요.</p><img id="imgOut" alt=""></div></dialog>
 
 <script>
 /*CALC-START*/
@@ -427,23 +435,6 @@ function render() {
   if ($('name').value.trim()) who.push($('name').value.trim());
   $('slipWho').textContent = who.join(' · ');
 }
-function slipText() {
-  var v = last.v, o = last.o;
-  return [
-    $('slipWho').textContent + ' 급여 명세',
-    '이달매출(점판제외) ' + won(v.sales) + ' / 포인트결제 ' + won(v.points),
-    '급여정산매출 ' + won(o.settle) + ' → 부가세 제외 ' + won(o.settleNet),
-    '시술 프로테이지(' + $('outPct').textContent + ') ' + won(o.commission),
-    '점판수당 ' + won(o.rAllow) + ' / 블랭크 점판수당 ' + won(v.bAllow),
-    '강의료 및 수당 ' + won(v.extra),
-    '합계 ' + won(o.gross),
-    '원천징수(3.3%) -' + won(o.tax),
-    '시술 토탈 급여 ' + won(o.total),
-    '공제액 -' + won(o.deduct) + ' (제품구입+본인시술 ' + won(v.dProduct) + ', 식비 ' + won(v.dMeal) + ', 재시술 ' + won(v.dRedo) + ', 네이버문자 ' + won(v.dSms) + ')',
-    '실지급액 ' + won(o.net) + '원'
-  ].join('\n');
-}
-
 buildRows($('serviceRows'), SERVICE);
 buildRows($('extraRows'), EXTRA);
 buildTiers();
@@ -474,14 +465,156 @@ $('btnClear').addEventListener('click', function () {
   $('exampleBadge').hidden = true;
   render(); save();
 });
-$('btnCopy').addEventListener('click', function () {
-  var msg = $('copyMsg');
-  try {
-    navigator.clipboard.writeText(slipText()).then(function () { msg.textContent = '복사했습니다.'; },
-      function () { msg.textContent = '복사가 막혀 있습니다. 화면 내용을 직접 선택해 주세요.'; });
-  } catch (e) { msg.textContent = '복사가 막혀 있습니다. 화면 내용을 직접 선택해 주세요.'; }
-  setTimeout(function () { msg.textContent = ''; }, 4000);
+
+/* ----- JPG · PDF 저장: 명세서를 캔버스에 그려 파일로 만든다 ----- */
+var FF = '"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
+function slipRows() {
+  var v = last.v, o = last.o, pct = $('outPct').textContent;
+  var m = function (n) { return '− ' + won(n); };
+  return [
+    { sec: '시술 매출' },
+    { l: '이달매출 (점판제외)', a: won(v.sales) },
+    { l: '포인트결제', a: '+ ' + won(v.points) },
+    { l: '카드매출 수수료 3%', b: won(v.card), a: m(o.dCard), neg: 1 },
+    { l: '네이버페이 수수료 2.9%', b: won(v.naver), a: m(o.dNaver), neg: 1 },
+    { l: '증모매출 기본 25%', b: won(v.hairBasic), a: m(o.dHairBasic), neg: 1 },
+    { l: '롱다발 · 붙임머리 · 항암 30%', b: won(v.hairLong), a: m(o.dHairLong), neg: 1 },
+    { l: 'MTSMP 10%', b: won(v.mtsmp), a: m(o.dMtsmp), neg: 1 },
+    { l: '가발 (남) 25%', b: won(v.wigM), a: m(o.dWigM), neg: 1 },
+    { l: '가발 (여) 30%', b: won(v.wigF), a: m(o.dWigF), neg: 1 },
+    { l: '급여정산매출', a: won(o.settle), bold: 1 },
+    { l: '부가세 10% 제외금액', a: won(o.settleNet), bold: 1 },
+    { sec: '점판' },
+    { l: '점판매출', a: won(v.rSales) },
+    { l: '카드 · 네이버페이 수수료', a: m(o.rCardFee + o.rNaverFee), neg: 1 },
+    { l: '부가세 10% 제외금액', a: won(o.rNet) },
+    { l: '블랭크 점판매출', a: won(v.bSales) },
+    { l: '카드 · 네이버페이 수수료', a: m(o.bCardFee + o.bNaverFee), neg: 1 },
+    { l: '부가세 10% 제외금액', a: won(o.bNet) },
+    { sec: '급여' },
+    { l: '시술 프로테이지 (' + pct + ')', b: won(o.settleNet) + ' × ' + pct, a: won(o.commission) },
+    { l: '점판수당 (20%)', a: won(o.rAllow) },
+    { l: '블랭크 점판수당', a: won(v.bAllow) },
+    { l: '강의료 및 수당', a: won(v.extra) },
+    { l: '합계', a: won(o.gross), bold: 1 },
+    { l: '원천징수 (3.3%)', a: m(o.tax), neg: 1 },
+    { l: '시술 토탈 급여', a: won(o.total), bold: 1 },
+    { sec: '공제액' },
+    { l: '제품구입 + 본인시술', a: m(v.dProduct), neg: 1 },
+    { l: '식비', a: m(v.dMeal), neg: 1 },
+    { l: '재시술', a: m(v.dRedo), neg: 1 },
+    { l: '네이버문자', a: m(v.dSms), neg: 1 }
+  ];
+}
+function drawSlip(S) {
+  var rows = slipRows(), o = last.o;
+  var W = 760, P = 36, RH = 32, SH = 30, HEAD = 84, NET = 76, FOOT = 34;
+  var C = { ink: '#1e1a27', muted: '#6a6478', line: '#dfdbe8', accent: '#5a3b8f', band: '#f3f1f8', minus: '#a8324a' };
+  var bodyH = 0;
+  rows.forEach(function (r) { bodyH += r.sec ? SH : RH; });
+  var H = P + HEAD + bodyH + 14 + NET + FOOT + P;
+  var cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
+  var g = cv.getContext('2d'); g.scale(S, S);
+  var font = function (w, s) { g.font = w + ' ' + s + 'px ' + FF; };
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+  g.textBaseline = 'middle';
+  var xL = P + 12, xB = W - P - 190, xA = W - P - 12, y = P;
+  font(700, 28); g.fillStyle = C.ink; g.textAlign = 'left'; g.fillText('급여 명세서', P, y + 22);
+  font(500, 15); g.fillStyle = C.muted; g.fillText($('slipWho').textContent, P, y + 58);
+  g.fillStyle = C.accent; g.fillRect(P, y + HEAD - 6, W - 2 * P, 3);
+  y += HEAD;
+  rows.forEach(function (r) {
+    if (r.sec) {
+      g.fillStyle = C.band; g.fillRect(P, y, W - 2 * P, SH);
+      font(700, 13); g.fillStyle = C.accent; g.textAlign = 'left'; g.fillText(r.sec, xL, y + SH / 2 + 1);
+      font(500, 12); g.fillStyle = C.muted; g.textAlign = 'right';
+      if (r.sec === '시술 매출') g.fillText('기준 금액', xB, y + SH / 2 + 1);
+      g.fillText('금액 (원)', xA, y + SH / 2 + 1);
+      y += SH; return;
+    }
+    font(r.bold ? 700 : 400, 14.5); g.fillStyle = r.bold ? C.ink : '#3a3545'; g.textAlign = 'left'; g.fillText(r.l, xL, y + RH / 2 + 1);
+    g.textAlign = 'right';
+    if (r.b) { font(400, 13); g.fillStyle = C.muted; g.fillText(r.b, xB, y + RH / 2 + 1); }
+    font(r.bold ? 700 : 500, 14.5); g.fillStyle = r.neg ? C.minus : C.ink; g.fillText(r.a, xA, y + RH / 2 + 1);
+    g.fillStyle = C.line; g.fillRect(P, y + RH - 1, W - 2 * P, 1);
+    y += RH;
+  });
+  y += 14;
+  g.fillStyle = C.accent; g.fillRect(P, y, W - 2 * P, NET);
+  g.fillStyle = '#ffffff'; font(600, 17); g.textAlign = 'left'; g.fillText('실지급액', xL + 6, y + NET / 2 + 1);
+  font(700, 32); g.textAlign = 'right'; g.fillText(won(o.net) + '원', xA - 6, y + NET / 2 + 2);
+  y += NET;
+  var d = new Date();
+  font(400, 12); g.fillStyle = C.muted; g.textAlign = 'right';
+  g.fillText('작성일 ' + d.getFullYear() + '. ' + (d.getMonth() + 1) + '. ' + d.getDate() + '.', W - P, y + FOOT / 2 + 4);
+  return cv;
+}
+function toJpeg(cv, q) { return new Promise(function (res, rej) { cv.toBlob(function (b) { b ? res(b) : rej(new Error('blob')); }, 'image/jpeg', q); }); }
+function buildPdf(cv) {
+  return toJpeg(cv, 0.95).then(function (b) { return b.arrayBuffer(); }).then(function (buf) {
+    var jpg = new Uint8Array(buf), PW = 595.28, PH = 841.89, M = 28;
+    var s = Math.min((PW - 2 * M) / cv.width, (PH - 2 * M) / cv.height);
+    var w = cv.width * s, h = cv.height * s, x = (PW - w) / 2, yb = PH - M - h;
+    var enc = new TextEncoder(), parts = [], offs = [], pos = 0;
+    var put = function (t) { var u = typeof t === 'string' ? enc.encode(t) : t; parts.push(u); pos += u.length; };
+    var obj = function (i, body) { offs[i] = pos; put(i + ' 0 obj\n'); body(); put('\nendobj\n'); };
+    var content = 'q ' + w.toFixed(2) + ' 0 0 ' + h.toFixed(2) + ' ' + x.toFixed(2) + ' ' + yb.toFixed(2) + ' cm /Im0 Do Q';
+    put('%PDF-1.4\n');
+    obj(1, function () { put('<< /Type /Catalog /Pages 2 0 R >>'); });
+    obj(2, function () { put('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'); });
+    obj(3, function () { put('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + PW + ' ' + PH + '] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>'); });
+    obj(4, function () { put('<< /Length ' + content.length + ' >>\nstream\n' + content + '\nendstream'); });
+    obj(5, function () { put('<< /Type /XObject /Subtype /Image /Width ' + cv.width + ' /Height ' + cv.height + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpg.length + ' >>\nstream\n'); put(jpg); put('\nendstream'); });
+    var xref = pos, tbl = 'xref\n0 6\n0000000000 65535 f \n';
+    for (var i = 1; i <= 5; i++) tbl += ('0000000000' + offs[i]).slice(-10) + ' 00000 n \n';
+    put(tbl + 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+    return new Blob(parts, { type: 'application/pdf' });
+  });
+}
+var HOSTED = !!(window.claude && typeof window.claude.use === 'function');
+var downloads = null, imgUrl = null;
+if (HOSTED) Promise.resolve(window.claude.use('downloads')).then(function (d) { downloads = d; }).catch(function () {});
+function say(t) { var el = $('saveMsg'); el.textContent = t; clearTimeout(say.t); say.t = setTimeout(function () { el.textContent = ''; }, 5000); }
+function fileName(ext) {
+  var base = ($('slipWho').textContent + ' 급여명세').replace(/[\\/:*?"<>|]/g, '').replace(/ · /g, ' ');
+  return base + '.' + ext;
+}
+function saveFile(name, blob, isImage) {
+  var fallback = function () {
+    if (!HOSTED) {
+      try {
+        var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+        say(name + ' 파일로 저장했습니다.'); return;
+      } catch (e) {}
+    }
+    if (!isImage) { say('이 화면에서는 PDF 저장을 쓸 수 없습니다. JPG로 저장을 이용해 주세요.'); return; }
+    if (imgUrl) URL.revokeObjectURL(imgUrl);
+    imgUrl = URL.createObjectURL(blob);
+    $('imgOut').src = imgUrl; $('imgOut').alt = name;
+    if (!$('dlgImg').open) $('dlgImg').showModal();
+  };
+  if (downloads) {
+    downloads.save({ filename: name, data: blob }).then(function () { say(name + ' 저장을 요청했습니다.'); },
+      function (e) { if (e && e.code === 'declined') return; fallback(); });
+    return;
+  }
+  fallback();
+}
+function fontsReady() {
+  try { return Promise.all([document.fonts.load('400 14px ' + FF, '가'), document.fonts.load('700 14px ' + FF, '가')]).catch(function () {}); }
+  catch (e) { return Promise.resolve(); }
+}
+$('btnJpg').addEventListener('click', function () {
+  fontsReady().then(function () { return toJpeg(drawSlip(2), 0.93); })
+    .then(function (b) { saveFile(fileName('jpg'), b, true); }, function () { say('이미지를 만들지 못했습니다.'); });
 });
+$('btnPdf').addEventListener('click', function () {
+  fontsReady().then(function () { return buildPdf(drawSlip(3)); })
+    .then(function (b) { saveFile(fileName('pdf'), b, false); }, function () { say('PDF를 만들지 못했습니다.'); });
+});
+$('dlgClose').addEventListener('click', function () { $('dlgImg').close(); });
 </script>
 </body>
 </html>
